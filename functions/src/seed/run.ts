@@ -1,5 +1,5 @@
 /**
- * Seeds the skills collection.
+ * Seeds the skills collection from `functions/content/`.
  *
  * Against the emulator:
  *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
@@ -7,10 +7,13 @@
  *   npm --prefix functions run seed
  *
  * Idempotent — writes are keyed by skill id, so re-running updates in place.
+ * Validation runs first: an invalid skill is never written.
  */
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { SEED_SKILLS } from './skills';
+import { validateSkillDocument } from '../../../server-shared/validateSkill';
+import { loadAllSkills } from '../content/load';
+import { assembleSystemPrompt } from '../skills';
 
 async function main(): Promise<void> {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -24,22 +27,39 @@ async function main(): Promise<void> {
     }
   }
 
+  const skills = loadAllSkills();
+
+  const invalid = skills
+    .map((skill) => ({
+      skill,
+      result: validateSkillDocument(skill, assembleSystemPrompt(skill)),
+    }))
+    .filter(({ result }) => !result.ok);
+
+  if (invalid.length > 0) {
+    for (const { skill, result } of invalid) {
+      console.error(`${skill.id}:`);
+      for (const error of result.errors) console.error(`  - ${error}`);
+    }
+    throw new Error('Refusing to seed invalid skills. Run content:build for detail.');
+  }
+
   initializeApp();
   const db = getFirestore();
 
   const batch = db.batch();
-  for (const skill of SEED_SKILLS) {
+  for (const skill of skills) {
     batch.set(db.collection('skills').doc(skill.id), skill);
   }
   await batch.commit();
 
-  console.log(`Seeded ${SEED_SKILLS.length} skills:`);
-  for (const skill of SEED_SKILLS) {
+  console.log(`Seeded ${skills.length} skills:`);
+  for (const skill of skills) {
     console.log(`  ${skill.id} — ${skill.title} (${skill.model.model})`);
   }
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

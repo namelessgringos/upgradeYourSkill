@@ -9,8 +9,11 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "seed": "node lib/functions/src/seed/run.js",
-    "serve": "npm run build && firebase emulators:start"
+    "seed": "npm run build && node lib/functions/src/seed/run.js",
+    "content:build": "npm run build && node lib/functions/src/content/build.js",
+    "evals": "npm run build && node lib/functions/src/evals/run.js",
+    "serve": "npm run build && firebase emulators:start",
+    "cost:report": "npm run build && node lib/functions/src/reports/costPerUser.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

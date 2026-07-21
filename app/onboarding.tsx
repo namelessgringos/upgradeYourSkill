@@ -98,7 +98,9 @@ export default function Onboarding() {
           </Text>
           <Card muted>
             <Text style={styles.trialLine}>✓ All 3 skills unlocked</Text>
-            <Text style={styles.trialLine}>✓ 50 messages a day</Text>
+            {/* Mirrors DAILY_MESSAGE_CAP.trial in functions/src/entitlement.ts,
+                which is derived from measured cost — keep the two in step. */}
+            <Text style={styles.trialLine}>✓ 30 messages a day</Text>
             <Text style={styles.trialLine}>✓ Guides, checklists, schemas & images</Text>
           </Card>
         </View>

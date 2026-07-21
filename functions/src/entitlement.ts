@@ -15,13 +15,35 @@ import { listSkillIds } from './skills';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Hard daily message caps, enforced server-side. Mirrors the approved
- *  prototype: free 5, trial 50, paid 500. */
+/**
+ * Hard daily message caps, enforced server-side.
+ *
+ * Derived from measurement, not carried over from the UI prototype (which had
+ * 5 / 50 / 500 as placeholders). Run `npm run economics` to reproduce.
+ *
+ * At the measured ~5.8k-token cached system block and a ~400-token answer, a
+ * turn costs about $0.0026 on Haiku 4.5. A typical user (~1 turn/day) costs
+ * ~$0.08/month, well inside CLAUDE.md's "under 10% of revenue" target.
+ *
+ * The caps exist to bound the tail, not the typical user:
+ *   free   5/day   ~$0.39/mo worst case
+ *   trial  30/day  ~$0.55 for the whole 7-day trial — acceptable as acquisition
+ *   active 40/day  ~$3.12/mo worst case, versus ~$0.08 typical
+ *
+ * 500/day was authorising ~$39/month per user, which is loss-making at any
+ * plausible price. Trial sits below active deliberately so converting is never
+ * a downgrade.
+ *
+ * PROVISIONAL: measured with the echo provider plus an assumed answer length.
+ * Re-derive once a real model has been through the eval harness, and again
+ * once a price is set (store commission of 15-30% matters more here than
+ * tokens do).
+ */
 export const DAILY_MESSAGE_CAP: Record<EntitlementStatus, number> = {
   none: 0,
   free: 5,
-  trial: 50,
-  active: 500,
+  trial: 30,
+  active: 40,
   paused: 0,
 };
 

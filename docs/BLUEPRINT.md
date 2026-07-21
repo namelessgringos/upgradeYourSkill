@@ -132,9 +132,12 @@ left to the model's discretion.
    App Store / Play IAP, needed if we ship native to the stores) vs Stripe (if
    we ship PWA/web and take payment directly, avoiding store commission).
    Blocks: trial-with-cap, entitlement webhook, the subscription price itself.
-2. **Distribution surface.** Native (App/Play Store, pays commission, best
-   install trust) vs PWA/web (no commission, weaker mobile install story). The
-   Expo codebase can target both; the decision drives the billing choice above.
+2. ~~**Distribution surface.**~~ **Resolved 2026-07-21: both native and PWA.**
+   The Expo codebase targets both. Consequences to carry into Phase 4: billing
+   needs RevenueCat *and* Stripe, and two entitlement webhook paths — real
+   surface for an MVP, so it wants justifying before it is built. Store
+   commission of 15–30% is the single largest input to real margin, far above
+   token cost (see CLAUDE.md → Measured).
 3. **The single monthly price** — blocked on the eval + p90 metering data.
 4. **Which 3 skills** to author first, and which one is the single
    highest-value skill for the walking skeleton.
