@@ -23,9 +23,25 @@ Client is a thin shell — all prompts assembled server-side.
 
 ## Status
 
-Phase 0 (foundations) complete: repo, stack, design system, docs, schema. Next:
-Phase 1 walking skeleton (login → list → detail → chat, one hardcoded skill).
-See the implementation plan.
+**Mocked UI/UX prototype** — the whole flow is navigable on a phone with no
+backend: splash → Google/Apple sign-in → onboarding wizard → dashboard →
+skill guide → coach chat (canned replies, checklists/schemas/images) →
+membership (usage + trial + 5-star-for-a-week) → settings. State (auth, trial,
+usage) persists via AsyncStorage. Everything under `constants/mockData.ts` and
+`hooks/useSession.tsx` is a stand-in for the real backend.
+
+Foundations (Phase 0) also complete: stack, design system, docs, schema. Next:
+wire the real Firebase backend behind `docs/API_CONTRACT.md`.
+
+## Try it
+
+```bash
+npm install
+npx expo start        # scan the QR with Expo Go (iOS/Android), or press w for web
+```
+
+Tip: Settings → **Reset prototype data** clears the mock account so you can
+replay onboarding.
 
 ## Develop
 
