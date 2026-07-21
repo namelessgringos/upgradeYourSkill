@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { Artifact } from '@/constants/mockData';
+import type { Artifact } from '@/constants/skillDisplay';
 import { JournalColors, Radius, Spacing } from '@/constants/theme';
 import { ArtifactCard } from './ArtifactCard';
 

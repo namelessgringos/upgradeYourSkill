@@ -1,20 +1,39 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Header } from '@/components/ui/Header';
 import { Pill } from '@/components/ui/Pill';
 import { Screen } from '@/components/ui/Screen';
-import { getSkill, tierColor } from '@/constants/mockData';
+import { tierColor, tierLabel } from '@/constants/skillDisplay';
 import { Fonts, JournalColors, Spacing } from '@/constants/theme';
-import { useSession } from '@/hooks/useSession';
+import * as api from '@/lib/api';
+import type { GetSkillResponse } from '@/server-shared/api';
 
 export default function SkillDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const skill = getSkill(id);
-  const { isSkillUnlocked } = useSession();
+  const [skill, setSkill] = useState<GetSkillResponse | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  if (!skill) {
+  useEffect(() => {
+    let active = true;
+    if (!id) return;
+    setFailed(false);
+    api
+      .getSkill({ skillId: id })
+      .then((result) => {
+        if (active) setSkill(result);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (failed) {
     return (
       <Screen>
         <Header title="Not found" showBack />
@@ -23,39 +42,58 @@ export default function SkillDetail() {
     );
   }
 
-  const unlocked = isSkillUnlocked(skill.id);
+  if (!skill) {
+    return (
+      <Screen>
+        <Header title="Loading" showBack />
+        <ActivityIndicator style={styles.loader} color={JournalColors.inkFaint} />
+      </Screen>
+    );
+  }
+
+  const { meta, guide, entitled } = skill;
 
   return (
     <Screen scroll>
-      <Header title={skill.title} showBack />
+      <Header title={meta.title} showBack />
 
       <View style={styles.hero}>
-        <Text style={styles.emoji}>{skill.emoji}</Text>
-        <Text style={styles.title}>{skill.title}</Text>
-        <Pill label={skill.tier === 'pro' ? 'Pro' : 'Core'} color={tierColor(skill.tier)} />
+        <Text style={styles.emoji}>{meta.emoji}</Text>
+        <Text style={styles.title}>{meta.title}</Text>
+        <Pill label={tierLabel(meta.tier)} color={tierColor(meta.tier)} />
         <Text style={styles.coach}>
-          {skill.coachName} · {skill.coachTagline}
+          {meta.coachName} · {meta.coachTagline}
         </Text>
       </View>
 
-      <Text style={styles.summary}>{skill.summary}</Text>
+      <Text style={styles.summary}>{meta.summary}</Text>
 
       <Text style={styles.guideLabel}>The guide</Text>
-      <View style={styles.guide}>
-        {skill.guide.map((section, i) => (
-          <Card key={i}>
-            <Text style={styles.sectionHeading}>{section.heading}</Text>
-            <Text style={styles.sectionBody}>{section.body}</Text>
-          </Card>
-        ))}
-      </View>
+      {guide ? (
+        <View style={styles.guide}>
+          {guide.map((section, i) => (
+            <Card key={i}>
+              <Text style={styles.sectionHeading}>{section.heading}</Text>
+              <Text style={styles.sectionBody}>{section.body}</Text>
+            </Card>
+          ))}
+        </View>
+      ) : (
+        // The server withholds the guide body entirely when the caller is not
+        // entitled — there is nothing here to unlock client-side.
+        <Card muted>
+          <Text style={styles.lockedBody}>
+            The full written guide unlocks with your trial.
+          </Text>
+        </Card>
+      )}
 
       <View style={styles.footer}>
-        {unlocked ? (
+        {entitled ? (
           <Button
-            label={`Start chatting with ${skill.coachName}`}
+            label={`Start chatting with ${meta.coachName}`}
             full
-            onPress={() => router.push(`/chat/${skill.id}`)}
+            onPress={() => router.push(`/chat/${meta.id}`)}
           />
         ) : (
           <>
@@ -74,6 +112,7 @@ export default function SkillDetail() {
 
 const styles = StyleSheet.create({
   empty: { color: JournalColors.inkFaint, textAlign: 'center', marginTop: 40 },
+  loader: { marginTop: 40 },
   hero: { alignItems: 'center', gap: 8, marginBottom: Spacing.lg },
   emoji: { fontSize: 52 },
   title: { fontSize: 26, fontWeight: '800', color: JournalColors.inkBlack, fontFamily: Fonts?.serif },
@@ -89,6 +128,7 @@ const styles = StyleSheet.create({
   guide: { gap: Spacing.md },
   sectionHeading: { fontSize: 16, fontWeight: '800', color: JournalColors.inkBlack, marginBottom: 6 },
   sectionBody: { fontSize: 15, lineHeight: 23, color: JournalColors.inkBrown },
+  lockedBody: { fontSize: 15, lineHeight: 23, color: JournalColors.inkBrown },
   footer: { marginTop: Spacing.xl, gap: Spacing.sm },
   lockedNote: { textAlign: 'center', color: JournalColors.inkFaint, fontSize: 14 },
 });

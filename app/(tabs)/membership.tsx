@@ -15,7 +15,8 @@ export default function Membership() {
     trialDaysLeft,
     usedToday,
     dailyLimit,
-    usageByDay,
+    lifetimeMessages,
+    activeDays,
     reviewBonusClaimed,
     activateTrial,
     claimReviewBonus,
@@ -23,8 +24,9 @@ export default function Membership() {
 
   const [rating, setRating] = useState(0);
 
-  const totalMessages = Object.values(usageByDay).reduce((a, b) => a + b, 0);
-  const daysActive = Object.keys(usageByDay).length || 1;
+  // Server-side counters — the client no longer keeps a usage history.
+  const totalMessages = lifetimeMessages;
+  const daysActive = Math.max(1, activeDays);
 
   const planLabel = plan === 'pro' ? 'Pro' : trialActive ? 'Free trial' : 'Free';
   const planColor = plan === 'pro' || trialActive ? JournalColors.accent : JournalColors.inkFaint;

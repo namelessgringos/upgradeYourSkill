@@ -1,210 +1,215 @@
 /**
- * Session + subscription state for the UI prototype. Mock only — no real auth,
- * no backend. State is persisted to AsyncStorage so the flow survives reloads
- * while you smoke-test on a phone.
+ * Session + entitlement state, backed by Firebase Auth and the Cloud
+ * Functions in docs/API_CONTRACT.md.
  *
- * Plans:
- *   free  → 1 chosen skill, a few messages/day
- *   trial → all skills, 7 days, generous daily cap
- *   pro   → all skills, high daily cap (post-purchase; mocked)
+ * The interface is deliberately the same shape the mocked prototype exposed,
+ * so the screens did not have to be redesigned around the backend. What
+ * changed is where the truth lives: plan, caps, and unlocked skills are now
+ * decided server-side and merely displayed here. Nothing in this file may be
+ * trusted for access control — the server re-checks every call.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
-import { SKILLS } from '@/constants/mockData';
+import * as api from '@/lib/api';
+import { auth } from '@/lib/firebase';
+import type {
+  EntitlementState,
+  MeterState,
+  SkillListItem,
+} from '@/server-shared/api';
 
-const STORAGE_KEY = 'skillscoach:session:v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Display-side plan label. `pro` is what the UI calls the server's `active`. */
 export type Plan = 'free' | 'trial' | 'pro';
-export type AuthProvider = 'google' | 'apple';
+export type AuthProvider = api.AuthProvider;
 
-export interface MockUser {
+export interface SessionUser {
   name: string;
   email: string;
   provider: AuthProvider;
 }
 
-interface PersistedState {
-  user: MockUser | null;
-  onboarded: boolean;
-  plan: Plan;
-  trialEndsAt: number | null;
-  freeSkillId: string | null;
-  usageByDay: Record<string, number>;
-  reviewBonusClaimed: boolean;
-}
-
-const DAILY_LIMIT: Record<Plan, number> = {
-  free: 5,
-  trial: 50,
-  pro: 500,
-};
-
-const INITIAL: PersistedState = {
-  user: null,
-  onboarded: false,
-  plan: 'free',
-  trialEndsAt: null,
-  freeSkillId: null,
-  usageByDay: {},
-  reviewBonusClaimed: false,
-};
-
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export interface SessionValue extends PersistedState {
+export interface SessionValue {
   loading: boolean;
-  // derived
+  /** True while a server round-trip is in flight after the first load. */
+  syncing: boolean;
+  error: string | null;
+
+  user: SessionUser | null;
+  skills: SkillListItem[];
+
+  plan: Plan;
+  onboarded: boolean;
+  freeSkillId: string | null;
+  reviewBonusClaimed: boolean;
+  trialActive: boolean;
+  trialDaysLeft: number;
+
   dailyLimit: number;
   usedToday: number;
   messagesLeftToday: number;
-  trialActive: boolean;
-  trialDaysLeft: number;
+  lifetimeMessages: number;
+  activeDays: number;
+
   unlockedSkillIds: string[];
   isSkillUnlocked: (id: string) => boolean;
-  // actions
+
   signIn: (provider: AuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
   completeOnboarding: (freeSkillId: string) => Promise<void>;
   activateTrial: () => Promise<void>;
   claimReviewBonus: () => Promise<void>;
-  recordMessage: () => Promise<void>;
+  /** Apply the meter returned by a chat call — avoids a second round-trip. */
+  applyMeter: (meter: MeterState) => void;
+  refresh: () => Promise<void>;
   resetAll: () => Promise<void>;
+}
+
+function planOf(status: EntitlementState['status']): Plan {
+  if (status === 'active') return 'pro';
+  if (status === 'trial') return 'trial';
+  return 'free';
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<PersistedState>(INITIAL);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [skills, setSkills] = useState<SkillListItem[]>([]);
+  const [entitlement, setEntitlement] = useState<EntitlementState | null>(null);
+  const [meter, setMeter] = useState<MeterState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load persisted state once.
+  /** Guards against a slow response for a signed-out user overwriting state. */
+  const currentUid = useRef<string | null>(null);
+
+  const loadServerState = useCallback(async (uid: string) => {
+    setSyncing(true);
+    try {
+      const [entitlementState, skillList, meterState] = await Promise.all([
+        api.getEntitlement(),
+        api.listSkills(),
+        api.getUsage(),
+      ]);
+      if (currentUid.current !== uid) return;
+      setEntitlement(entitlementState);
+      setSkills(skillList.skills);
+      setMeter(meterState);
+      setError(null);
+    } catch (e) {
+      if (currentUid.current !== uid) return;
+      setError(e instanceof Error ? e.message : 'Could not reach the server.');
+    } finally {
+      if (currentUid.current === uid) setSyncing(false);
+    }
+  }, []);
+
   useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (active && raw) {
-          setState({ ...INITIAL, ...(JSON.parse(raw) as PersistedState) });
-        }
-      } catch {
-        // ignore corrupt state in the prototype
-      } finally {
-        if (active) setLoading(false);
+    return onAuthStateChanged(auth, async (firebaseUser: User | null) => {
+      currentUid.current = firebaseUser?.uid ?? null;
+
+      if (!firebaseUser) {
+        setUser(null);
+        setEntitlement(null);
+        setMeter(null);
+        setSkills([]);
+        setLoading(false);
+        return;
       }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
 
-  // Persist on every change (after initial load).
-  useEffect(() => {
-    if (loading) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
-  }, [state, loading]);
-
-  const patch = useCallback((next: Partial<PersistedState>) => {
-    setState((prev) => ({ ...prev, ...next }));
-  }, []);
-
-  const signIn = useCallback(
-    async (provider: AuthProvider) => {
-      const name = provider === 'google' ? 'Alex Rivera' : 'Sam Carter';
-      patch({
-        user: {
-          name,
-          email: provider === 'google' ? 'alex@gmail.com' : 'sam@icloud.com',
-          provider,
-        },
+      const providerId = firebaseUser.providerData[0]?.providerId ?? '';
+      setUser({
+        name: firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? 'there',
+        email: firebaseUser.email ?? '',
+        provider: providerId.startsWith('apple') ? 'apple' : 'google',
       });
-    },
-    [patch]
-  );
+      await loadServerState(firebaseUser.uid);
+      setLoading(false);
+    });
+  }, [loadServerState]);
+
+  const applyEntitlement = useCallback((next: EntitlementState) => {
+    setEntitlement(next);
+  }, []);
+
+  const signIn = useCallback(async (provider: AuthProvider) => {
+    setError(null);
+    await api.signIn(provider);
+  }, []);
 
   const signOut = useCallback(async () => {
-    setState(INITIAL);
+    await api.signOut();
   }, []);
 
   const completeOnboarding = useCallback(
     async (freeSkillId: string) => {
-      patch({ onboarded: true, freeSkillId });
+      applyEntitlement(await api.setOnboardingChoice({ freeSkillId }));
     },
-    [patch]
+    [applyEntitlement]
   );
 
   const activateTrial = useCallback(async () => {
-    patch({ plan: 'trial', trialEndsAt: Date.now() + 7 * DAY_MS });
-  }, [patch]);
+    applyEntitlement(await api.activateTrial());
+    setMeter(await api.getUsage());
+  }, [applyEntitlement]);
 
   const claimReviewBonus = useCallback(async () => {
-    setState((prev) => {
-      if (prev.reviewBonusClaimed) return prev;
-      const base =
-        prev.trialEndsAt && prev.trialEndsAt > Date.now()
-          ? prev.trialEndsAt
-          : Date.now();
-      return {
-        ...prev,
-        reviewBonusClaimed: true,
-        plan: prev.plan === 'free' ? 'trial' : prev.plan,
-        trialEndsAt: base + 7 * DAY_MS,
-      };
-    });
-  }, []);
+    applyEntitlement(await api.redeemReviewBonus());
+    setMeter(await api.getUsage());
+  }, [applyEntitlement]);
 
-  const recordMessage = useCallback(async () => {
-    setState((prev) => {
-      const key = todayKey();
-      return {
-        ...prev,
-        usageByDay: { ...prev.usageByDay, [key]: (prev.usageByDay[key] ?? 0) + 1 },
-      };
-    });
-  }, []);
+  const refresh = useCallback(async () => {
+    const uid = currentUid.current;
+    if (uid) await loadServerState(uid);
+  }, [loadServerState]);
 
   const resetAll = useCallback(async () => {
-    setState(INITIAL);
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    // Entitlement is server-owned; the client can only drop its session.
+    await api.signOut();
   }, []);
 
   const value = useMemo<SessionValue>(() => {
-    const now = Date.now();
-    const trialActive =
-      state.plan === 'trial' && !!state.trialEndsAt && state.trialEndsAt > now;
-    const effectivePlan: Plan =
-      state.plan === 'trial' && !trialActive ? 'free' : state.plan;
-    const dailyLimit = DAILY_LIMIT[effectivePlan];
-    const usedToday = state.usageByDay[todayKey()] ?? 0;
-    const unlockedSkillIds =
-      effectivePlan === 'free'
-        ? state.freeSkillId
-          ? [state.freeSkillId]
-          : []
-        : SKILLS.map((s) => s.id);
-    const trialDaysLeft =
-      trialActive && state.trialEndsAt
-        ? Math.max(0, Math.ceil((state.trialEndsAt - now) / DAY_MS))
-        : 0;
+    const status = entitlement?.status ?? 'free';
+    const plan = planOf(status);
+    const trialEndsAt = entitlement?.trialEndsAt
+      ? Date.parse(entitlement.trialEndsAt)
+      : null;
+    const trialActive = status === 'trial' && !!trialEndsAt && trialEndsAt > Date.now();
+    const dailyLimit = entitlement?.messageCapPerDay ?? 0;
+    const usedToday = meter?.used ?? 0;
+    const unlockedSkillIds = entitlement?.unlockedSkillIds ?? [];
 
     return {
-      ...state,
-      plan: effectivePlan,
       loading,
+      syncing,
+      error,
+      user,
+      skills,
+      plan,
+      onboarded: entitlement?.onboarded ?? false,
+      freeSkillId: entitlement?.freeSkillId ?? null,
+      reviewBonusClaimed: entitlement?.reviewBonusClaimed ?? false,
+      trialActive,
+      trialDaysLeft:
+        trialActive && trialEndsAt
+          ? Math.max(0, Math.ceil((trialEndsAt - Date.now()) / DAY_MS))
+          : 0,
       dailyLimit,
       usedToday,
       messagesLeftToday: Math.max(0, dailyLimit - usedToday),
-      trialActive,
-      trialDaysLeft,
+      lifetimeMessages: meter?.lifetimeMessages ?? 0,
+      activeDays: meter?.activeDays ?? 0,
       unlockedSkillIds,
       isSkillUnlocked: (id: string) => unlockedSkillIds.includes(id),
       signIn,
@@ -212,18 +217,24 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       completeOnboarding,
       activateTrial,
       claimReviewBonus,
-      recordMessage,
+      applyMeter: setMeter,
+      refresh,
       resetAll,
     };
   }, [
-    state,
     loading,
+    syncing,
+    error,
+    user,
+    skills,
+    entitlement,
+    meter,
     signIn,
     signOut,
     completeOnboarding,
     activateTrial,
     claimReviewBonus,
-    recordMessage,
+    refresh,
     resetAll,
   ]);
 

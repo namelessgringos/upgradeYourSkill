@@ -5,24 +5,32 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Pill } from '@/components/ui/Pill';
 import { Screen } from '@/components/ui/Screen';
-import { SKILLS, tierColor } from '@/constants/mockData';
+import { tierColor, tierLabel } from '@/constants/skillDisplay';
 import { Fonts, JournalColors, Spacing } from '@/constants/theme';
 import { useSession } from '@/hooks/useSession';
 
 const STEPS = ['Welcome', 'How it works', 'Pick a skill', 'Free trial'];
 
 export default function Onboarding() {
-  const { user, completeOnboarding, activateTrial } = useSession();
+  const { user, skills, completeOnboarding, activateTrial } = useSession();
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
 
   const finish = async (withTrial: boolean) => {
-    await completeOnboarding(picked ?? SKILLS[0].id);
-    if (withTrial) await activateTrial();
-    router.replace('/(tabs)');
+    const choice = picked ?? skills[0]?.id;
+    if (!choice || busy) return;
+    setBusy(true);
+    try {
+      await completeOnboarding(choice);
+      if (withTrial) await activateTrial();
+      router.replace('/(tabs)');
+    } catch {
+      setBusy(false);
+    }
   };
 
   return (
@@ -61,7 +69,7 @@ export default function Onboarding() {
             unlock all three.
           </Text>
           <View style={styles.skillList}>
-            {SKILLS.map((s) => {
+            {skills.map((s) => {
               const active = picked === s.id;
               return (
                 <Card key={s.id} onPress={() => setPicked(s.id)} style={active ? styles.skillActive : undefined}>
@@ -71,7 +79,7 @@ export default function Onboarding() {
                       <Text style={styles.skillTitle}>{s.title}</Text>
                       <Text style={styles.skillPromise}>{s.promise}</Text>
                     </View>
-                    <Pill label={s.tier === 'pro' ? 'Pro' : 'Core'} color={tierColor(s.tier)} />
+                    <Pill label={tierLabel(s.tier)} color={tierColor(s.tier)} />
                   </View>
                 </Card>
               );
@@ -103,8 +111,17 @@ export default function Onboarding() {
         )}
         {step === 3 && (
           <>
-            <Button label="Start 7-day free trial" full onPress={() => finish(true)} />
-            <Pressable onPress={() => finish(false)} style={styles.laterBtn}>
+            <Button
+              label={busy ? 'Setting up…' : 'Start 7-day free trial'}
+              full
+              disabled={busy}
+              onPress={() => finish(true)}
+            />
+            <Pressable
+              onPress={() => finish(false)}
+              disabled={busy}
+              style={styles.laterBtn}
+            >
               <Text style={styles.later}>Maybe later — continue free</Text>
             </Pressable>
           </>

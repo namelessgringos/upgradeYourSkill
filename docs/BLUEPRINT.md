@@ -23,8 +23,12 @@ static guide → chat with a coach constrained to that skill's domain.
 Exactly these. Source: the MVP v1 section of the Todoist project.
 
 ### Product surface
-- **Email register + login.** Email + password, verification email, password
-  reset. No OAuth, no social, no personas.
+- ~~**Email register + login.**~~ **Amended 2026-07-21: Google / Apple
+  sign-in.** The approved UI prototype ships social sign-in and that is the
+  UX being built. Firebase Auth still owns identity. Still no personas. See
+  `docs/API_CONTRACT.md` → Amendment.
+- **Free tier** (amended 2026-07-21): one skill chosen at onboarding, hard
+  daily message cap. Present in the approved prototype; enforced server-side.
 - **Flat list of skills.** A scrollable list — title, one-line promise, price
   tier. No catalog UI, no search, no categories.
 - **Skill detail page + written guide.** The actual product: curated,

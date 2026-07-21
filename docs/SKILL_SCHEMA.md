@@ -1,5 +1,9 @@
 # SKILL CONTENT SCHEMA
 
+> **Amended 2026-07-21:** `SkillPublic` gained `emoji` and `starters`. Both are
+> cosmetic, both were already in the approved UI, neither is secret. The
+> canonical source is `server-shared/skillSchema.ts`.
+
 The contract between content authors and the app. Everything downstream depends
 on this, so it is frozen **before** any skill is written. Types:
 `server-shared/skillSchema.ts`.

@@ -5,13 +5,21 @@ import { Card } from '@/components/ui/Card';
 import { Pill } from '@/components/ui/Pill';
 import { Screen } from '@/components/ui/Screen';
 import { UsageMeter } from '@/components/ui/UsageMeter';
-import { SKILLS, tierColor } from '@/constants/mockData';
+import { tierColor, tierLabel } from '@/constants/skillDisplay';
 import { Fonts, JournalColors, Spacing } from '@/constants/theme';
 import { useSession } from '@/hooks/useSession';
 
 export default function Dashboard() {
-  const { user, plan, trialActive, trialDaysLeft, usedToday, dailyLimit, isSkillUnlocked } =
-    useSession();
+  const {
+    user,
+    plan,
+    skills,
+    trialActive,
+    trialDaysLeft,
+    usedToday,
+    dailyLimit,
+    isSkillUnlocked,
+  } = useSession();
   const firstName = user?.name.split(' ')[0] ?? 'there';
 
   return (
@@ -49,7 +57,7 @@ export default function Dashboard() {
 
       <Text style={styles.section}>Your skills</Text>
       <View style={styles.list}>
-        {SKILLS.map((s) => {
+        {skills.map((s) => {
           const unlocked = isSkillUnlocked(s.id);
           return (
             <Card
@@ -67,7 +75,7 @@ export default function Dashboard() {
                   </View>
                   <Text style={styles.promise}>{s.promise}</Text>
                 </View>
-                <Pill label={s.tier === 'pro' ? 'Pro' : 'Core'} color={tierColor(s.tier)} />
+                <Pill label={tierLabel(s.tier)} color={tierColor(s.tier)} />
               </View>
             </Card>
           );
