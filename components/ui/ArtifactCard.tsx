@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { Artifact } from '@/constants/mockData';
+import type { Artifact } from '@/constants/skillDisplay';
 import { Fonts, JournalColors, Radius, Spacing } from '@/constants/theme';
 
 /** Renders a coach "artifact" (schema / checklist / image) inline in the chat,

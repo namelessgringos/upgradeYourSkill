@@ -23,33 +23,58 @@ Client is a thin shell — all prompts assembled server-side.
 
 ## Status
 
-**Mocked UI/UX prototype** — the whole flow is navigable on a phone with no
-backend: splash → Google/Apple sign-in → onboarding wizard → dashboard →
-skill guide → coach chat (canned replies, checklists/schemas/images) →
-membership (usage + trial + 5-star-for-a-week) → settings. State (auth, trial,
-usage) persists via AsyncStorage. Everything under `constants/mockData.ts` and
-`hooks/useSession.tsx` is a stand-in for the real backend.
+**Phase 1 walking skeleton, running on the Firebase emulator.** The whole flow
+is real end to end: Firebase Auth sign-in → skills loaded from Firestore →
+guide gated by a server-side entitlement check → chat through a Cloud Function
+that assembles the prompt server-side and meters tokens per user.
 
-Foundations (Phase 0) also complete: stack, design system, docs, schema. Next:
-wire the real Firebase backend behind `docs/API_CONTRACT.md`.
+The client is a thin shell: no prompt, model name, or skill config ships in the
+app. `constants/mockData.ts` is gone.
 
-## Try it
+Not yet real: no cloud project (emulator only) and no Anthropic key, so `chat`
+currently answers via `EchoProvider`. `AnthropicProvider` is written but has
+not made a live API call. Real Google/Apple OAuth needs client IDs and a dev
+build; against the emulator the existing buttons mint a test credential.
+
+## Run it
+
+Prerequisites: Node 22+, and **JDK 21+** (the Firestore emulator requires it —
+`brew install openjdk@21`).
 
 ```bash
 npm install
-npx expo start        # scan the QR with Expo Go (iOS/Android), or press w for web
+npm --prefix functions install
+npm --prefix functions run build
+
+# terminal 1 — backend
+npm run emulators
+
+# terminal 2 — seed the 3 skills (once per emulator start)
+npm run seed
+
+# terminal 3 — the app
+npx expo start        # Expo Go on a device, or press w for web
 ```
 
-Tip: Settings → **Reset prototype data** clears the mock account so you can
-replay onboarding.
+The app auto-detects the emulator and resolves the host from the Expo dev
+server, so a phone on the same network works without configuration.
+
+To point at a real project instead, set `EXPO_PUBLIC_FIREBASE_API_KEY` and
+friends; the emulator connection switches off automatically.
+
+To use the real Anthropic provider, put the key where the emulator can see it:
+
+```bash
+echo 'ANTHROPIC_API_KEY=sk-ant-...' > functions/.secret.local   # gitignored
+```
 
 ## Develop
 
 ```bash
-npm install
-npm start          # Expo dev server
-npm run lint
+npx tsc --noEmit                  # client types
+npx expo lint
+npm --prefix functions run typecheck
 ```
 
-Server (added in Phase 1) lives under `functions/`. Never commit secrets — see
-`.gitignore` (`.env`, `google-services.json`, `GoogleService-Info.plist`).
+Server lives under `functions/`; types shared with the client are in
+`server-shared/`. Never commit secrets — see `.gitignore`.

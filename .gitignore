@@ -38,3 +38,11 @@ functions/node_modules/
 # IDE
 .vscode/
 .idea/
+
+# Firebase emulator
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*-debug.log
+functions/.secret.local

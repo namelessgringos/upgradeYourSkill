@@ -3,11 +3,34 @@
 Frozen before parallel work starts. Client and Cloud Functions both code
 against this. Changes here are a deliberate, announced event, not a silent edit.
 
+## Amendment — 2026-07-21 (Phase 1)
+
+Three deliberate changes, made when the approved UI prototype turned out to
+contradict the frozen contract. Recorded here rather than applied silently.
+
+1. **Auth is Google/Apple, not email/password.** The approved prototype ships
+   social sign-in. Firebase Auth still owns identity and still issues the ID
+   token every endpoint verifies, so only the credential type changes. Real
+   OAuth client IDs do not exist yet; against the emulator the client mints an
+   unsigned credential, which yields a genuine uid and ID token. Swapping in
+   `expo-auth-session` replaces one client function and no server code.
+2. **`free` added to entitlement status.** The prototype has a free tier — one
+   skill chosen at onboarding, hard daily cap. Status is now
+   `none | free | trial | active | paused`.
+3. **Entitlement lives on the `users/{uid}` document**, not at
+   `users/{uid}/entitlement` — that path is a *collection* in Firestore, not a
+   document. Usage remains the subcollection specified below.
+
+Also added: `SkillPublic.emoji` and `SkillPublic.starters` (both cosmetic, both
+already in the approved UI), and `MeterState.lifetimeMessages` / `activeDays`
+so the membership screen can show all-time totals without the client holding a
+usage history.
+
 ## Transport & auth
 
-- **Auth** is Firebase Auth (email/password). Register, login, email
-  verification, and password reset are done client-side with the Firebase Auth
-  SDK — there are **no custom auth endpoints**.
+- **Auth** is Firebase Auth (Google / Apple — see Amendment above). Sign-in is
+  done client-side with the Firebase Auth SDK — there are **no custom auth
+  endpoints**.
 - Every server call sends the Firebase **ID token**; the function verifies it.
   An unverified or missing token → `401`.
 - **Entitlement is checked on every call** (non-negotiable rule #4). The check
@@ -24,6 +47,7 @@ against this. Changes here are a deliberate, announced event, not a silent edit.
 | Code | Meaning | Client action |
 |---|---|---|
 | 401 | No/invalid ID token | Route to login |
+| 402 `not_entitled` | Signed in, skill locked on this plan | Show paywall sheet |
 | 402 | Signed in, not entitled | Show paywall sheet |
 | 429 `cap_reached` | Trial daily message cap hit | Show cap message + upgrade |
 | 429 `soft_cap` | Paid soft cap hit, paused | Show opt-in-to-continue (never auto-charge) |

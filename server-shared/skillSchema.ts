@@ -32,8 +32,13 @@ export interface SkillPublic {
   tier: SkillTier;
   /** Short marketing paragraph for the detail header. */
   summary: string;
+  /** Display glyph for list rows and the chat empty state. Cosmetic. */
+  emoji: string;
   /** The static written guide — the actual product. */
   guide: GuideSection[];
+  /** Suggested opening prompts shown in an empty chat. Cosmetic; the coach is
+   *  not constrained to them. */
+  starters: string[];
   /** Coach display name + one-line description (cosmetic only in v1; NOT a
    *  persona system — see BLUEPRINT "Out of scope"). */
   coachName: string;

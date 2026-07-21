@@ -46,9 +46,29 @@ Done in this commit:
 **Verify:** `npm install` resolves; `npx tsc --noEmit` passes; `npm run lint`
 clean.
 
-## Phase 1 — Walking skeleton
-Goal: **login → list → detail → chat, one hardcoded skill, no payment, no
-polish.** Proves the whole path end to end.
+## Phase 1 — Walking skeleton ✅ (emulator)
+Goal: **login → list → detail → chat, no payment, no polish.** Proves the whole
+path end to end.
+
+Done: Firebase config committed (no secrets); real Firebase Auth behind the
+existing Google/Apple UI; `listSkills` / `getSkill` / `chat` / `getEntitlement`
+/ `getUsage` per `API_CONTRACT.md`; all 3 skills seeded to Firestore as
+`SkillDocument`s with server-only prompts; entitlement checked and tokens
+metered on every chat call.
+
+Deviations from the original plan, all deliberate:
+- All 3 skills went straight into Firestore rather than one hardcoded skill —
+  Phase 2 step 1 pulled forward, so there is no throwaway hardcoded path.
+- Runs against the **emulator suite only**. No cloud project, no Anthropic key.
+  The `AnthropicProvider` is written and typechecked but has not executed a
+  real API call; `EchoProvider` stands in when no key is present.
+- Entitlement (Phase 3) landed early because the approved UI already has a
+  free tier, a trial, and a usage meter that need a server to be truthful.
+
+**Still open before this is production-real:** create the Firebase project
+(Blaze — Functions need outbound HTTP), set `ANTHROPIC_API_KEY` in Secret
+Manager, and run the eval sets. Real Google/Apple OAuth needs client IDs, an
+Apple Developer account, and a dev build — it will not run in Expo Go.
 
 1. Firebase project + `firebase init` (Functions + Firestore + Auth). → verify:
    emulator boots.

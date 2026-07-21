@@ -1,0 +1,23 @@
+{
+  "name": "skills-coach-functions",
+  "private": true,
+  "main": "lib/functions/src/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "seed": "node lib/functions/src/seed/run.js",
+    "serve": "npm run build && firebase emulators:start"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  }
+}
