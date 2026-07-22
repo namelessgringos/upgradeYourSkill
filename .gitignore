@@ -46,3 +46,6 @@ firestore-debug.log
 ui-debug.log
 *-debug.log
 functions/.secret.local
+
+# Eval reports — regenerated, and can carry model output
+functions/evals/reports/

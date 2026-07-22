@@ -86,16 +86,45 @@ Apple Developer account, and a dev build — it will not run in Expo Go.
 **Exit gate:** the four steps work against the real backend with one seeded
 skill. No payment yet.
 
-## Phase 2 — Freeze the contract & schema, seed real content
-1. Move the hardcoded skill into Firestore as a `SkillDocument`; `getSkill`
-   projects `SkillPublic`. → verify: prompt never appears in any client payload
-   (inspect network).
-2. Skill authoring/upload script (Firebase Admin, validates against
-   `skillSchema.ts`). → verify: upload a skill from a JSON doc.
-3. **Author 3 skills, content first** (guides must stand on their own).
-4. **Eval set: 30 questions/skill**, check Haiku quality; flag any skill needing
-   Sonnet (set in its Firestore `model` field). → verify: eval harness runs,
-   quality logged per skill.
+## Phase 2 — Content, grounding & model independence ✅ (pending real-model evals)
+
+1. ✅ Skills live in Firestore as `SkillDocument`s; `getSkill` projects
+   `SkillPublic`. Verified by `npm run e2e` — asserts no prompt or guide body
+   reaches an unentitled client.
+2. ✅ Authoring pipeline: skills are authored as Markdown + JSON under
+   `functions/content/<id>/` and validated by `server-shared/validateSkill.ts`
+   (runtime, since the schema types are compile-time only). `npm run
+   content:build` gates on a 1200-word minimum guide.
+3. ✅ **3 skills authored, content first** — 2714–2983 words each, 9 sections.
+4. ✅ **Eval harness with 30 questions/skill** (`npm run evals`). Two layers:
+   deterministic boundary rules (a violation is a hard fail, self-tested by
+   `npm run check:rules`) and an LLM judge. `--provider` / `--model` turn it
+   into a model-comparison matrix.
+5. ✅ **Guide grounding instead of RAG.** `assembleSystemPrompt` injects the
+   whole guide. One skill per conversation means the corpus already fits in
+   context, so retrieval would add machinery that can only lose sections. Side
+   effect: the system block clears Haiku's 4096-token cache minimum, so prompt
+   caching finally applies (~3x cheaper per turn).
+6. ✅ **Caps re-derived from measurement** (`npm run economics`). 500/day was
+   authorising ~$39/user/month. Now 5 / 30 / 40.
+7. ✅ Cost-per-user query (`npm run cost:report`) — rule #5 satisfied.
+
+**Still open:** the eval numbers were produced with the echo provider, so
+quality scores and the Haiku-vs-Sonnet decision per skill are not yet answered.
+That needs an `ANTHROPIC_API_KEY` (~$1–2 per full run).
+
+### Model independence (added Phase 2)
+
+`OpenAICompatibleProvider` covers Ollama, LM Studio, vLLM, and hosted
+open-weight providers behind the existing `LLMProvider` interface. This is
+**benchmarking capability, not live routing** — BLUEPRINT keeps multi-provider
+routing out of v1, and Anthropic remains the only production provider.
+
+Local candidates for a 36GB Mac Studio are MoE models (dense 24–27B runs at
+~4–5 tok/s on Apple Silicon; MoE reaches ~20–22): Qwen3.6-35B-A3B, Gemma 4
+26B-A4B. The decisive metric is **boundary adherence, not fluency** — a coach
+that drifts into diagnosis is a liability no throughput number offsets. Note
+the Mac Studio is a benchmark box, not a production origin.
 
 ## Phase 3 — Entitlement, metering, trial, meter UI
 1. Entitlement service + `getEntitlement`; gate `getSkill.guide` and `chat` on

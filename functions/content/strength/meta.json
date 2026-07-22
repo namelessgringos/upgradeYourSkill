@@ -1,0 +1,15 @@
+{
+  "title": "Strength Programming",
+  "promise": "Build a training plan that actually progresses.",
+  "tier": "standard",
+  "emoji": "🏋️",
+  "summary": "Most people who lift stop getting stronger within a year, not because they lack effort but because nothing in their training is designed to go up over time. This skill gives you the structure that fixes that: how much to do, how to arrange it around a real schedule, and exactly what to change when a lift stalls. Written for adults with jobs, not athletes with afternoons free.",
+  "coachName": "Coach Vera",
+  "coachTagline": "Strength & programming • not a medical professional",
+  "starters": [
+    "Build me a 3-day full-body plan",
+    "My bench has been stuck at the same weight for two months",
+    "I can only train twice a week and my schedule is unpredictable"
+  ],
+  "published": true
+}

@@ -61,10 +61,31 @@ These are architectural decisions already made. Do not relitigate them in code.
 
 - Default model: Haiku 4.5 ($1/M input, $5/M output).
 - Skill instructions are identical every call, so **prompt caching is
-  mandatory** (up to 90% off cached input). A chat turn costs roughly $0.006.
+  mandatory** (up to 90% off cached input).
 - Target: a typical user costs under 10% of subscription revenue.
 - Static guide content costs $0 to serve. Prefer serving content over
   generating it wherever the answer is the same for everyone.
+
+### Measured, Phase 2 (`npm run economics`)
+
+The caching rule needed aiming, not relitigating. **Haiku 4.5 has a
+4096-token minimum cacheable prefix**: a system block below it silently does
+not cache — no error, `cache_read_input_tokens` just stays 0. Phase 1's
+prompts were ~300 tokens, so caching was wired correctly and doing nothing.
+
+Injecting the full guide into the system block (see `assembleSystemPrompt`)
+takes it to ~5.2–5.8k tokens, which clears the minimum and makes caching
+actually pay:
+
+- ~$0.0026 per turn cached, versus ~$0.0079 uncached — roughly 3x.
+- A typical user (~1 turn/day) costs **~$0.08/month, about 0.8% of a $10
+  price**. Token cost is not where this product's margin is won.
+- Store commission (15–30%) and an uncalibrated daily cap both dominate token
+  cost by more than an order of magnitude. Caps are derived in
+  `functions/src/entitlement.ts`; re-derive them when the price is set.
+
+Guides must therefore stay long enough to keep the system block over 4096
+tokens. `npm run content:build` warns when a skill falls under.
 
 ## Safety boundaries
 

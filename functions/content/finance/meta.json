@@ -1,0 +1,16 @@
+{
+  "title": "Personal Finance Foundations",
+  "promise": "Get your money organized in a weekend.",
+  "tier": "standard",
+  "emoji": "💰",
+  "summary": "Most money problems are not maths problems. They are a missing system, plus a lot of quiet dread about looking at the numbers. This is a calm, no-jargon setup you can build in a weekend: a two-week spending audit that ends, an order of operations that tells you what to fund next, and a set of automatic transfers that keep working long after your motivation runs out.",
+  "coachName": "Nadia",
+  "coachTagline": "Money habits • education only, not financial advice",
+  "starters": [
+    "Help me build a simple budget",
+    "Emergency fund or pay debt first?",
+    "Where is my money actually going?",
+    "I got a raise — what should I do with it?"
+  ],
+  "published": true
+}

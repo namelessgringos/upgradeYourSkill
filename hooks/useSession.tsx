@@ -20,6 +20,7 @@ import {
 } from 'react';
 import * as api from '@/lib/api';
 import { auth } from '@/lib/firebase';
+import * as mock from '@/lib/mockApi';
 import type {
   EntitlementState,
   MeterState,
@@ -116,10 +117,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (firebaseUser: User | null) => {
-      currentUid.current = firebaseUser?.uid ?? null;
+    const onUser = async (
+      next: { uid: string; name: string; email: string; providerId: string } | null
+    ) => {
+      currentUid.current = next?.uid ?? null;
 
-      if (!firebaseUser) {
+      if (!next) {
         setUser(null);
         setEntitlement(null);
         setMeter(null);
@@ -128,15 +131,39 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const providerId = firebaseUser.providerData[0]?.providerId ?? '';
       setUser({
-        name: firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? 'there',
-        email: firebaseUser.email ?? '',
-        provider: providerId.startsWith('apple') ? 'apple' : 'google',
+        name: next.name,
+        email: next.email,
+        provider: next.providerId.startsWith('apple') ? 'apple' : 'google',
       });
-      await loadServerState(firebaseUser.uid);
+      await loadServerState(next.uid);
       setLoading(false);
-    });
+    };
+
+    if (api.MOCK_API) {
+      return mock.onAuthChange((u) =>
+        onUser(
+          u && {
+            uid: u.uid,
+            name: u.displayName,
+            email: u.email,
+            providerId: u.providerId,
+          }
+        )
+      );
+    }
+
+    return onAuthStateChanged(auth, (firebaseUser: User | null) =>
+      onUser(
+        firebaseUser && {
+          uid: firebaseUser.uid,
+          name:
+            firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? 'there',
+          email: firebaseUser.email ?? '',
+          providerId: firebaseUser.providerData[0]?.providerId ?? '',
+        }
+      )
+    );
   }, [loadServerState]);
 
   const applyEntitlement = useCallback((next: EntitlementState) => {

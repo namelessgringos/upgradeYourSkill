@@ -10,7 +10,13 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "emulators": "firebase emulators:start --only auth,functions,firestore --project upgrade-your-skill-dev",
-    "seed": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=upgrade-your-skill-dev npm --prefix functions run seed"
+    "seed": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=upgrade-your-skill-dev npm --prefix functions run seed",
+    "content:build": "npm --prefix functions run content:build",
+    "evals": "npm --prefix functions run evals --",
+    "e2e": "node scripts/e2e.mjs",
+    "check:rules": "npm --prefix functions run build && node scripts/check-rules.mjs",
+    "economics": "node scripts/economics.mjs",
+    "cost:report": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=upgrade-your-skill-dev npm --prefix functions run cost:report"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
