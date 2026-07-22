@@ -50,7 +50,7 @@ npm --prefix functions run build
 # terminal 1 — backend
 npm run emulators
 
-# terminal 2 — seed the 3 skills (once per emulator start)
+# terminal 2 — seed the skills (once per emulator start)
 npm run seed
 
 # terminal 3 — the app

@@ -19,6 +19,22 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SKILLS: SkillMeta[] = [
   {
+    id: 'birth',
+    title: 'Labour, Birth & the First Weeks',
+    promise: 'Know what to do the moment it starts — and what to do next.',
+    tier: 'standard',
+    emoji: '👶',
+    coachName: 'Rowan',
+    coachTagline: 'Birth prep & the fourth trimester • not a midwife or doctor',
+    summary:
+      'Written for two people who have never done this before: telling early labour from the real thing, when to stay home and when to ring, what to pack, a birth plan that survives the plan changing, and what the birth partner actually does hour by hour.',
+    starters: [
+      'Contractions started an hour ago — is this it?',
+      'Help me write our birth plan',
+      'What is my job as the birth partner?',
+    ],
+  },
+  {
     id: 'finance',
     title: 'Personal Finance Foundations',
     promise: 'Get your money organized in a weekend.',
