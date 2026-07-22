@@ -68,7 +68,9 @@ if (!res?.ok) {
   process.exit(1);
 }
 
-await rm(OUT, { recursive: true, force: true });
+// Only a full run clears the directory — a filtered run must not delete the
+// shots it was not asked to retake.
+if (!filters.length) await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 
 const browser = await chromium.launch();
