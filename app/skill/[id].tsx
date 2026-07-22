@@ -7,6 +7,7 @@ import { Header } from '@/components/ui/Header';
 import { Pill } from '@/components/ui/Pill';
 import { Screen } from '@/components/ui/Screen';
 import { tierColor, tierLabel } from '@/constants/skillDisplay';
+import { TEXT_SCALE, usePreferences } from '@/hooks/usePreferences';
 import { Fonts, JournalColors, Spacing } from '@/constants/theme';
 import * as api from '@/lib/api';
 import type { GetSkillResponse } from '@/server-shared/api';
@@ -15,6 +16,8 @@ export default function SkillDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [skill, setSkill] = useState<GetSkillResponse | null>(null);
   const [failed, setFailed] = useState(false);
+  const { textSize } = usePreferences();
+  const scale = TEXT_SCALE[textSize];
 
   useEffect(() => {
     let active = true;
@@ -52,6 +55,8 @@ export default function SkillDetail() {
   }
 
   const { meta, guide, entitled } = skill;
+  // Reading size is a device preference (Settings → Reading).
+  const bodyStyle = { fontSize: 15 * scale, lineHeight: 23 * scale };
 
   return (
     <Screen scroll>
@@ -74,7 +79,7 @@ export default function SkillDetail() {
           {guide.map((section, i) => (
             <Card key={i}>
               <Text style={styles.sectionHeading}>{section.heading}</Text>
-              <Text style={styles.sectionBody}>{section.body}</Text>
+              <Text style={[styles.sectionBody, bodyStyle]}>{section.body}</Text>
             </Card>
           ))}
         </View>

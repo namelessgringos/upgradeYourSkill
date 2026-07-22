@@ -103,6 +103,7 @@ let meter: MeterState = {
 const delay = <T,>(value: T, ms = 250): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), ms));
 
+
 const syncMeterLimit = () => {
   meter = { ...meter, limit: entitlement.messageCapPerDay };
 };
@@ -152,6 +153,27 @@ export const activateTrial = (): Promise<EntitlementState> => {
   syncMeterLimit();
   return delay(entitlement);
 };
+
+/**
+ * Stand-in for what a billing webhook does server-side: flip the entitlement
+ * to active. Called only by MockBillingProvider (lib/billing.ts).
+ */
+export function mockGrantSubscription(): EntitlementState {
+  entitlement = {
+    ...entitlement,
+    status: 'active',
+    trialEndsAt: null,
+    unlockedSkillIds: SKILLS.map((s) => s.id),
+    messageCapPerDay: 40,
+  };
+  syncMeterLimit();
+  return entitlement;
+}
+
+/** What `restore` would find. Null when nothing was ever purchased. */
+export function mockActiveSubscription(): EntitlementState | null {
+  return entitlement.status === 'active' ? entitlement : null;
+}
 
 export const redeemReviewBonus = (): Promise<EntitlementState> => {
   entitlement = {
@@ -236,4 +258,77 @@ export async function signOut(): Promise<void> {
   };
   meter = { ...meter, used: 0, limit: 3, lifetimeMessages: 0 };
   emit();
+}
+
+// ----------------------------------------------------------------- presets
+
+/**
+ * Named starting states, so a screen can be opened directly in a state that
+ * would otherwise take a sign-in, an onboarding pick and 40 messages to reach.
+ * Used by `npm run shots` and by hand: `localhost:8081/?mock=capped`.
+ *
+ * Caps mirror DAILY_MESSAGE_CAP in functions/src/entitlement.ts.
+ */
+export type MockPreset = 'new' | 'free' | 'trial' | 'pro' | 'capped';
+
+const CAP = { free: 5, trial: 30, active: 40 } as const;
+
+const PRESETS: Record<MockPreset, () => void> = {
+  new: () => {
+    currentUser = null;
+  },
+  free: () => {
+    currentUser = PROFILES.google;
+    entitlement = {
+      status: 'free',
+      trialEndsAt: null,
+      unlockedSkillIds: ['strength'],
+      messageCapPerDay: CAP.free,
+      onboarded: true,
+      freeSkillId: 'strength',
+      reviewBonusClaimed: false,
+    };
+    meter = { ...meter, used: 2, limit: CAP.free, lifetimeMessages: 14, activeDays: 6 };
+  },
+  trial: () => {
+    currentUser = PROFILES.google;
+    entitlement = {
+      status: 'trial',
+      trialEndsAt: new Date(Date.now() + 5 * DAY_MS).toISOString(),
+      unlockedSkillIds: SKILLS.map((s) => s.id),
+      messageCapPerDay: CAP.trial,
+      onboarded: true,
+      freeSkillId: 'strength',
+      reviewBonusClaimed: false,
+    };
+    meter = { ...meter, used: 11, limit: CAP.trial, lifetimeMessages: 63, activeDays: 9 };
+  },
+  pro: () => {
+    currentUser = PROFILES.apple;
+    entitlement = {
+      status: 'active',
+      trialEndsAt: null,
+      unlockedSkillIds: SKILLS.map((s) => s.id),
+      messageCapPerDay: CAP.active,
+      onboarded: true,
+      freeSkillId: 'strength',
+      reviewBonusClaimed: true,
+    };
+    meter = { ...meter, used: 7, limit: CAP.active, lifetimeMessages: 412, activeDays: 38 };
+  },
+  capped: () => {
+    PRESETS.free();
+    meter = { ...meter, used: CAP.free };
+  },
+};
+
+/** Applies a preset. Safe to call before any listener exists. */
+export function applyPreset(preset: MockPreset): void {
+  PRESETS[preset]();
+  emit();
+}
+
+if (typeof window !== 'undefined') {
+  const requested = new URLSearchParams(window.location.search).get('mock');
+  if (requested && requested in PRESETS) applyPreset(requested as MockPreset);
 }
