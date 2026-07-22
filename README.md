@@ -114,6 +114,31 @@ Caveat: an echo run produces the right *shape* but meaningless *numbers* — its
 answers are ~50 tokens where a real one is ~400, and output is priced 5x input.
 Pass `ASSUMED_OUTPUT_TOKENS=400` to `economics` until a real model is measured.
 
+## Reviewing the UI without a device
+
+```bash
+npm run web       # terminal 1
+npm run shots     # terminal 2 → .shots/*.png, one per screen and state
+npm run shots -- membership settings   # just those
+```
+
+Screens are captured at phone size against the mock API, so no emulator and no
+backend are needed. Each shot seeds a state through `?mock=` — `new`, `free`,
+`trial`, `pro`, `capped` (see `lib/mockApi.ts`). The same query works by hand:
+`localhost:8081/(tabs)/membership?mock=trial`.
+
+A shot may carry a flow, which makes it a smoke test as well as a picture:
+`membership-purchased` clicks Subscribe and fails if entitlement does not flip.
+
+## Billing
+
+`lib/billing.ts` is the seam. `MockBillingProvider` ships today — real latency,
+a cancellable purchase, real restore semantics — so screens do not change when
+the real provider arrives. RevenueCat (Stripe as merchant of record) is the
+decided implementation; every account, product and legal page it needs is
+listed in [`docs/BUREAUCRACY.md`](./docs/BUREAUCRACY.md). Nothing external is
+wired yet, and entitlement is still only ever granted server-side.
+
 ## Develop
 
 ```bash

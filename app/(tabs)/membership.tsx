@@ -1,12 +1,14 @@
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Pill } from '@/components/ui/Pill';
 import { Screen } from '@/components/ui/Screen';
 import { UsageMeter } from '@/components/ui/UsageMeter';
 import { Fonts, JournalColors, Spacing } from '@/constants/theme';
+import { usePreferences } from '@/hooks/usePreferences';
 import { useSession } from '@/hooks/useSession';
+import { billing, MONTHLY, type Offering } from '@/lib/billing';
 
 export default function Membership() {
   const {
@@ -20,16 +22,73 @@ export default function Membership() {
     reviewBonusClaimed,
     activateTrial,
     claimReviewBonus,
+    refresh,
   } = useSession();
+  const { tap } = usePreferences();
 
+  const [offering, setOffering] = useState<Offering>(MONTHLY);
+  const [busy, setBusy] = useState<null | 'purchase' | 'restore' | 'trial'>(null);
   const [rating, setRating] = useState(0);
 
-  // Server-side counters — the client no longer keeps a usage history.
-  const totalMessages = lifetimeMessages;
-  const daysActive = Math.max(1, activeDays);
+  useEffect(() => {
+    let cancelled = false;
+    billing
+      .getOfferings()
+      .then(([first]) => {
+        if (!cancelled && first) setOffering(first);
+      })
+      .catch(() => {
+        // Falls back to the compiled-in offering; the price still renders.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const planLabel = plan === 'pro' ? 'Pro' : trialActive ? 'Free trial' : 'Free';
+  const daysActive = Math.max(1, activeDays);
+  const planLabel = plan === 'pro' ? 'Full access' : trialActive ? 'Free trial' : 'Free';
   const planColor = plan === 'pro' || trialActive ? JournalColors.accent : JournalColors.inkFaint;
+
+  const onPurchase = async () => {
+    setBusy('purchase');
+    tap();
+    try {
+      const result = await billing.purchase(offering.id);
+      if (result.status === 'purchased' || result.status === 'restored') {
+        await refresh();
+        Alert.alert('You’re in 🎉', 'Every skill is unlocked. Thanks for subscribing.');
+      } else if (result.status === 'unavailable') {
+        Alert.alert('Not available', result.reason);
+      }
+      // 'cancelled' is not an error and does not deserve an alert.
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onRestore = async () => {
+    setBusy('restore');
+    try {
+      const result = await billing.restore();
+      if (result.status === 'restored') {
+        await refresh();
+        Alert.alert('Restored', 'Your subscription is active on this device again.');
+      } else {
+        Alert.alert('Nothing to restore', 'No previous purchase was found for this account.');
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onTrial = async () => {
+    setBusy('trial');
+    try {
+      await activateTrial();
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const onClaim = async () => {
     await claimReviewBonus();
@@ -46,11 +105,19 @@ export default function Membership() {
           <Pill label={planLabel} color={planColor} filled={trialActive || plan === 'pro'} />
         </View>
         {trialActive ? (
-          <Text style={styles.planNote}>{trialDaysLeft} days left in your free trial.</Text>
+          <Text style={styles.planNote}>
+            {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left, then it goes back to Free
+            unless you subscribe.
+          </Text>
         ) : plan === 'pro' ? (
-          <Text style={styles.planNote}>You have full access to every skill.</Text>
+          <Text style={styles.planNote}>
+            Every skill unlocked, {dailyLimit} coach messages a day. Renews monthly.
+          </Text>
         ) : (
-          <Text style={styles.planNote}>1 skill, {dailyLimit} messages a day.</Text>
+          <Text style={styles.planNote}>
+            One skill, {dailyLimit} coach messages a day. The written guide for your skill stays
+            yours to read.
+          </Text>
         )}
       </Card>
 
@@ -59,36 +126,59 @@ export default function Membership() {
         <UsageMeter used={usedToday} limit={dailyLimit} />
         <View style={styles.statsRow}>
           <Stat label="Today" value={`${usedToday}`} />
-          <Stat label="All-time" value={`${totalMessages}`} />
-          <Stat label="Avg / day" value={`${Math.round(totalMessages / daysActive)}`} />
+          <Stat label="All-time" value={`${lifetimeMessages}`} />
+          <Stat label="Avg / day" value={`${Math.round(lifetimeMessages / daysActive)}`} />
         </View>
       </Card>
 
-      {!trialActive && plan !== 'pro' && (
-        <Card muted style={styles.upsell}>
-          <Text style={styles.cardTitle}>Unlock everything</Text>
-          <Text style={styles.upsellText}>All 3 skills · 50 messages a day · free for 7 days.</Text>
-          <Button label="Start 7-day free trial" full onPress={activateTrial} />
-        </Card>
-      )}
+      {plan !== 'pro' && (
+        <Card muted style={styles.offer}>
+          <View style={styles.offerHead}>
+            <Text style={styles.offerTitle}>{offering.title}</Text>
+            <Text style={styles.price}>
+              {offering.priceLabel}
+              <Text style={styles.per}> / {offering.period}</Text>
+            </Text>
+          </View>
+          <Text style={styles.offerDescription}>{offering.description}</Text>
 
-      {trialActive && (
-        <Card style={styles.upsell}>
-          <Text style={styles.cardTitle}>Keep your access</Text>
-          <Text style={styles.upsellText}>
-            Subscribe to keep all skills after your trial. One simple monthly plan.
+          <View style={styles.perks}>
+            {offering.perks.map((perk) => (
+              <View key={perk} style={styles.perkRow}>
+                <Text style={styles.tick}>✓</Text>
+                <Text style={styles.perkText}>{perk}</Text>
+              </View>
+            ))}
+          </View>
+
+          {busy === 'purchase' ? (
+            <ActivityIndicator color={JournalColors.inkBrown} style={styles.spinner} />
+          ) : (
+            <Button label={`Subscribe · ${offering.priceLabel}/mo`} full onPress={onPurchase} />
+          )}
+
+          {!trialActive && (
+            <Button
+              label="Try 7 days free first"
+              variant="secondary"
+              full
+              disabled={busy === 'trial'}
+              onPress={onTrial}
+            />
+          )}
+
+          <Text style={styles.finePrint}>
+            Renews every month until you cancel. Cancel any time from Settings — you keep access
+            until the month you paid for runs out.
           </Text>
-          <Button
-            label="Subscribe (mock)"
-            full
-            onPress={() => Alert.alert('Checkout', 'Billing is mocked in this prototype.')}
-          />
         </Card>
       )}
 
       <Card style={styles.reviewCard}>
         <Text style={styles.cardTitle}>Get a free week ⭐</Text>
-        <Text style={styles.upsellText}>Leave us a 5-star review and we’ll add an extra week.</Text>
+        <Text style={styles.offerDescription}>
+          Leave us a 5-star review and we’ll add an extra week.
+        </Text>
         <View style={styles.stars}>
           {[1, 2, 3, 4, 5].map((n) => (
             <Pressable key={n} onPress={() => setRating(n)} disabled={reviewBonusClaimed} hitSlop={6}>
@@ -103,11 +193,10 @@ export default function Membership() {
         )}
       </Card>
 
-      <Pressable
-        onPress={() => Alert.alert('Restore purchases', 'Mocked in this prototype.')}
-        style={styles.restore}
-      >
-        <Text style={styles.restoreText}>Restore purchases</Text>
+      <Pressable onPress={onRestore} disabled={busy === 'restore'} style={styles.restore}>
+        <Text style={styles.restoreText}>
+          {busy === 'restore' ? 'Checking…' : 'Restore purchases'}
+        </Text>
       </Pressable>
     </Screen>
   );
@@ -128,14 +217,39 @@ const styles = StyleSheet.create({
   planCard: { gap: 8 },
   planRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   planName: { fontSize: 17, fontWeight: '800', color: JournalColors.inkBlack },
-  planNote: { fontSize: 14, color: JournalColors.inkBrown },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: JournalColors.inkBlack, marginBottom: Spacing.sm },
+  planNote: { fontSize: 14, color: JournalColors.inkBrown, lineHeight: 20 },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: JournalColors.inkBlack,
+    marginBottom: Spacing.sm,
+  },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.md },
   stat: { alignItems: 'center', flex: 1 },
-  statValue: { fontSize: 22, fontWeight: '800', color: JournalColors.inkBlack, fontFamily: Fonts?.serif },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: JournalColors.inkBlack,
+    fontFamily: Fonts?.serif,
+  },
   statLabel: { fontSize: 12, color: JournalColors.inkFaint, marginTop: 2 },
-  upsell: { gap: Spacing.sm },
-  upsellText: { fontSize: 14, color: JournalColors.inkBrown, lineHeight: 20, marginBottom: Spacing.sm },
+  offer: { gap: Spacing.sm },
+  offerHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  offerTitle: { fontSize: 18, fontWeight: '800', color: JournalColors.inkBlack },
+  price: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: JournalColors.inkBlack,
+    fontFamily: Fonts?.serif,
+  },
+  per: { fontSize: 14, fontWeight: '600', color: JournalColors.inkFaint },
+  offerDescription: { fontSize: 14, color: JournalColors.inkBrown, lineHeight: 20 },
+  perks: { gap: 6, marginVertical: Spacing.sm },
+  perkRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  tick: { color: JournalColors.selectedBorder, fontWeight: '800', fontSize: 15 },
+  perkText: { flex: 1, fontSize: 14, color: JournalColors.inkBrown, lineHeight: 20 },
+  spinner: { paddingVertical: 14 },
+  finePrint: { fontSize: 12, color: JournalColors.inkFaint, lineHeight: 17, marginTop: 4 },
   reviewCard: { gap: Spacing.sm },
   stars: { flexDirection: 'row', gap: 6, marginBottom: Spacing.sm },
   star: { fontSize: 32, color: JournalColors.accent },

@@ -49,3 +49,6 @@ functions/.secret.local
 
 # Eval reports — regenerated, and can carry model output
 functions/evals/reports/
+
+# UI screenshots from scripts/shots.mjs
+.shots/
