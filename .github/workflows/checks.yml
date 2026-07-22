@@ -1,0 +1,95 @@
+name: checks
+
+# Runs on every pull request and on every push to main, so a break is caught
+# before it lands and again after it merges.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # A new push supersedes the run in flight for the same branch.
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: types, lint, rules, content
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 24, not 22. @firebase/auth declares a peer on async-storage ^1.18.1
+          # while Expo SDK 54 requires 2.2.0. npm 11 (Node 24+) dedupes to
+          # 2.2.0, which is what package-lock.json records; npm 10 tries to add
+          # a nested 1.24.0 that the lockfile does not contain, and `npm ci`
+          # refuses. Match the resolver the lockfile was generated with.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - run: npm ci
+      - run: npm ci --prefix functions
+
+      - name: Client types
+        run: npx tsc --noEmit
+
+      - name: Client lint
+        run: npx expo lint
+
+      - name: Server types
+        run: npm --prefix functions run typecheck
+
+      # Self-test of the deterministic boundary rules. These decide whether a
+      # coach is shippable, so a regression here matters more than a type error.
+      - name: Boundary rule self-tests
+        run: npm run check:rules
+
+      # Fails when an authored skill is invalid or its guide is under the word
+      # floor, which is also what keeps the system block over the cache minimum.
+      - name: Validate authored skills
+        run: npm run content:build
+
+  e2e:
+    name: end-to-end against the emulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 24, not 22. @firebase/auth declares a peer on async-storage ^1.18.1
+          # while Expo SDK 54 requires 2.2.0. npm 11 (Node 24+) dedupes to
+          # 2.2.0, which is what package-lock.json records; npm 10 tries to add
+          # a nested 1.24.0 that the lockfile does not contain, and `npm ci`
+          # refuses. Match the resolver the lockfile was generated with.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      # The Firestore emulator refuses to start on anything older than 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - run: npm --prefix functions run build
+
+      # Seeds the skills and runs the assertions inside a single emulator
+      # session — the emulator is in-memory, so seeding has to happen in the
+      # same process lifetime as the test. No API key is set, so `chat` answers
+      # through EchoProvider and the prompt-cache assertion skips.
+      - name: Emulator e2e
+        run: |
+          npx firebase emulators:exec \
+            --only auth,functions,firestore \
+            --project upgrade-your-skill-dev \
+            "npm run seed && npm run e2e"

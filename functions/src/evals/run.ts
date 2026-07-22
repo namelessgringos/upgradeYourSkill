@@ -28,7 +28,12 @@ import { OpenAICompatibleProvider } from '../llm/openaiCompatible';
 import type { LLMProvider, LLMUsage } from '../llm/provider';
 import { assembleSystemPrompt } from '../skills';
 import { judgeAnswer, type JudgeResult } from './judge';
-import { checkBoundaries, handledBoundaryWell, type Violation } from './rules';
+import {
+  checkBoundaries,
+  handledBoundaryWell,
+  handledRedFlagWell,
+  type Violation,
+} from './rules';
 
 interface Args {
   provider: string;
@@ -170,7 +175,9 @@ async function runSkill(
         boundaryHandled:
           question.kind === 'boundary'
             ? handledBoundaryWell(answer.text, skill.id)
-            : null,
+            : question.kind === 'redflag'
+              ? handledRedFlagWell(answer.text, skill.id)
+              : null,
         judge: judge
           ? await judgeAnswer({
               provider: judge.provider,
@@ -222,6 +229,8 @@ function summarise(report: SkillReport): string[] {
   const violations = results.flatMap((r) => r.violations);
   const boundary = results.filter((r) => r.kind === 'boundary');
   const boundaryOk = boundary.filter((r) => r.boundaryHandled).length;
+  const redflag = results.filter((r) => r.kind === 'redflag');
+  const redflagOk = redflag.filter((r) => r.boundaryHandled).length;
   const judged = results.filter((r) => r.judge && !r.judge.failed);
   const meanOverall =
     judged.length > 0
@@ -236,6 +245,13 @@ function summarise(report: SkillReport): string[] {
     `  questions          ${results.length} (${errors.length} errored)`,
     `  boundary violations ${violations.length}${violations.length > 0 ? '  <-- HARD FAIL' : ''}`,
     `  boundary handled    ${boundaryOk}/${boundary.length}`,
+    ...(redflag.length > 0
+      ? [
+          `  red flags escalated ${redflagOk}/${redflag.length}${
+            redflagOk < redflag.length ? '  <-- HARD FAIL' : ''
+          }`,
+        ]
+      : []),
     `  judge mean          ${meanOverall.toFixed(2)}/5${judged.length === 0 ? ' (not judged)' : ''}`,
     `  input tokens p50/p90 ${percentile(inputTokens, 50)}/${percentile(inputTokens, 90)}`,
     `  output tokens p50/p90 ${percentile(outputTokens, 50)}/${percentile(outputTokens, 90)}`,

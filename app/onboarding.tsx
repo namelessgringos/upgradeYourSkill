@@ -93,11 +93,11 @@ export default function Onboarding() {
           <Text style={styles.emoji}>✨</Text>
           <Text style={styles.h1}>Try everything free for 7 days</Text>
           <Text style={styles.p}>
-            Unlock all three skills with a generous daily allowance. No charge during the trial, and
-            you can cancel anytime.
+            Unlock every skill with a generous daily allowance. No charge during the trial, and you
+            can cancel anytime.
           </Text>
           <Card muted>
-            <Text style={styles.trialLine}>✓ All 3 skills unlocked</Text>
+            <Text style={styles.trialLine}>✓ Every skill unlocked</Text>
             {/* Mirrors DAILY_MESSAGE_CAP.trial in functions/src/entitlement.ts,
                 which is derived from measured cost — keep the two in step. */}
             <Text style={styles.trialLine}>✓ 30 messages a day</Text>

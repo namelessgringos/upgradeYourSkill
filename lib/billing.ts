@@ -48,7 +48,7 @@ export const MONTHLY: Offering = {
   period: 'month',
   description: 'Every skill, every guide, 40 coach messages a day. Cancel anytime.',
   perks: [
-    'All 3 skills and their full written guides',
+    'Every skill and its full written guide',
     '40 coach messages a day',
     'New skills included as they land',
   ],
