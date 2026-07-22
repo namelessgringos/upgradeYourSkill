@@ -8,6 +8,7 @@ The subscription pays for **the information**. The AI is the delivery layer.
 
 ## Read first
 
+- [`docs/STATUS.md`](./docs/STATUS.md) — **where the project actually is, and what to do next.**
 - [`CLAUDE.md`](./CLAUDE.md) — project context & non-negotiable rules.
 - [`docs/BLUEPRINT.md`](./docs/BLUEPRINT.md) — **scope authority** (MVP v1 vs out of scope).
 - [`docs/IMPLEMENTATION_PLAN.md`](./docs/IMPLEMENTATION_PLAN.md) — step-by-step build order.

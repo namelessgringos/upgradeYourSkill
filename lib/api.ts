@@ -21,8 +21,16 @@ import type {
   SkillListItem,
 } from '@/server-shared/api';
 import { auth, functions, httpsFunctionUrl, useEmulators } from './firebase';
+import * as mock from './mockApi';
 
 export type AuthProvider = 'google' | 'apple';
+
+/**
+ * Dev switch: serve the whole client from lib/mockApi instead of the backend,
+ * so the UI can be worked on without the emulator suite running. Flip to
+ * `false` once `npm run emulators` is up.
+ */
+export const MOCK_API = true;
 
 /** Server-signalled failure the UI reacts to specifically (paywall, cap). */
 export class ApiError extends Error {
@@ -47,6 +55,8 @@ export class ApiError extends Error {
  * real. Swapping in expo-auth-session later replaces only this function body.
  */
 export async function signIn(provider: AuthProvider): Promise<void> {
+  if (MOCK_API) return mock.signIn(provider);
+
   if (!useEmulators) {
     throw new ApiError(
       'oauth_not_configured',
@@ -70,25 +80,52 @@ export async function signIn(provider: AuthProvider): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  if (MOCK_API) return mock.signOut();
   await firebaseSignOut(auth);
 }
 
 // ------------------------------------------------------------- callables
 
 const call = <Req, Res>(name: string) => {
-  const fn = httpsCallable<Req, Res>(functions, name);
-  return async (data?: Req): Promise<Res> => (await fn(data)).data;
+  let fn: ReturnType<typeof httpsCallable<Req, Res>> | null = null;
+  return async (data?: Req): Promise<Res> => {
+    fn ??= httpsCallable<Req, Res>(functions, name);
+    return (await fn(data)).data;
+  };
 };
 
-export const listSkills = call<void, ListSkillsResponse>('listSkills');
-export const getSkill = call<{ skillId: string }, GetSkillResponse>('getSkill');
-export const getEntitlement = call<void, EntitlementState>('getEntitlement');
-export const getUsage = call<void, MeterState>('getUsage');
-export const setOnboardingChoice = call<{ freeSkillId: string }, EntitlementState>(
+const callListSkills = call<void, ListSkillsResponse>('listSkills');
+const callGetSkill = call<{ skillId: string }, GetSkillResponse>('getSkill');
+const callGetEntitlement = call<void, EntitlementState>('getEntitlement');
+const callGetUsage = call<void, MeterState>('getUsage');
+const callSetOnboardingChoice = call<{ freeSkillId: string }, EntitlementState>(
   'setOnboardingChoice'
 );
-export const activateTrial = call<void, EntitlementState>('activateTrial');
-export const redeemReviewBonus = call<void, EntitlementState>('redeemReviewBonus');
+const callActivateTrial = call<void, EntitlementState>('activateTrial');
+const callRedeemReviewBonus = call<void, EntitlementState>('redeemReviewBonus');
+
+export const listSkills = (): Promise<ListSkillsResponse> =>
+  MOCK_API ? mock.listSkills() : callListSkills();
+
+export const getSkill = (req: { skillId: string }): Promise<GetSkillResponse> =>
+  MOCK_API ? mock.getSkill(req) : callGetSkill(req);
+
+export const getEntitlement = (): Promise<EntitlementState> =>
+  MOCK_API ? mock.getEntitlement() : callGetEntitlement();
+
+export const getUsage = (): Promise<MeterState> =>
+  MOCK_API ? mock.getUsage() : callGetUsage();
+
+export const setOnboardingChoice = (req: {
+  freeSkillId: string;
+}): Promise<EntitlementState> =>
+  MOCK_API ? mock.setOnboardingChoice(req) : callSetOnboardingChoice(req);
+
+export const activateTrial = (): Promise<EntitlementState> =>
+  MOCK_API ? mock.activateTrial() : callActivateTrial();
+
+export const redeemReviewBonus = (): Promise<EntitlementState> =>
+  MOCK_API ? mock.redeemReviewBonus() : callRedeemReviewBonus();
 
 // ------------------------------------------------------------------- chat
 
@@ -100,6 +137,8 @@ export async function sendChat(
   skillId: string,
   messages: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<ChatResponse> {
+  if (MOCK_API) return mock.sendChat(skillId, messages);
+
   const user: User | null = auth.currentUser;
   if (!user) throw new ApiError('unauthenticated', 'Sign in required.', 401);
 
