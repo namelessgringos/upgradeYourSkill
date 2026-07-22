@@ -20,6 +20,7 @@ import type {
   MeterState,
   SkillListItem,
 } from '@/server-shared/api';
+import { ApiError } from './apiError';
 import { auth, functions, httpsFunctionUrl, useEmulators } from './firebase';
 import * as mock from './mockApi';
 
@@ -33,16 +34,7 @@ export type AuthProvider = 'google' | 'apple';
 export const MOCK_API = true;
 
 /** Server-signalled failure the UI reacts to specifically (paywall, cap). */
-export class ApiError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly status: number
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+export { ApiError };
 
 // ------------------------------------------------------------------- auth
 

@@ -5,6 +5,7 @@
  * Deliberately holds no real coach prompts or guide content (non-negotiable
  * rule #1) — guides here are placeholder text, and chat replies are canned.
  */
+import { ApiError } from './apiError';
 import type {
   ChatResponse,
   EntitlementState,
@@ -101,7 +102,7 @@ let entitlement: EntitlementState = {
   status: 'free',
   trialEndsAt: null,
   unlockedSkillIds: [],
-  messageCapPerDay: 3,
+  messageCapPerDay: 5,
   onboarded: false,
   freeSkillId: null,
   reviewBonusClaimed: false,
@@ -110,7 +111,7 @@ let entitlement: EntitlementState = {
 let meter: MeterState = {
   periodStart: new Date().toISOString(),
   used: 0,
-  limit: 3,
+  limit: 5,
   unit: 'messages',
   lifetimeMessages: 0,
   activeDays: 1,
@@ -205,6 +206,19 @@ export const sendChat = (
   skillId: string,
   messages: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<ChatResponse> => {
+  // Mirrors the server: the cap is enforced before the model is called, and
+  // refused with the same code the screens branch on. Without this the
+  // cap-reached path is unreachable in mock mode and never gets exercised.
+  if (meter.used >= meter.limit) {
+    return Promise.reject(
+      new ApiError('cap_reached', "You've hit today's message limit.", 429)
+    );
+  }
+  if (!entitlement.unlockedSkillIds.includes(skillId)) {
+    return Promise.reject(
+      new ApiError('not_entitled', 'This skill is locked on your plan.', 402)
+    );
+  }
   const last = messages[messages.length - 1]?.content ?? '';
   meter = {
     ...meter,
@@ -267,12 +281,12 @@ export async function signOut(): Promise<void> {
     status: 'free',
     trialEndsAt: null,
     unlockedSkillIds: [],
-    messageCapPerDay: 3,
+    messageCapPerDay: 5,
     onboarded: false,
     freeSkillId: null,
     reviewBonusClaimed: false,
   };
-  meter = { ...meter, used: 0, limit: 3, lifetimeMessages: 0 };
+  meter = { ...meter, used: 0, limit: 5, lifetimeMessages: 0 };
   emit();
 }
 
