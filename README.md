@@ -130,6 +130,20 @@ backend are needed. Each shot seeds a state through `?mock=` — `new`, `free`,
 A shot may carry a flow, which makes it a smoke test as well as a picture:
 `membership-purchased` clicks Subscribe and fails if entitlement does not flip.
 
+```bash
+npm run shots -- --journey   # → .shots/journey/NN-name.png
+```
+
+A journey is one continuous session rather than a cold page load: sign in →
+onboarding → home → guide → chat → send → keep sending until the daily cap
+refuses → paywall, screenshotting each step. It is the only way to see screens
+that exist mid-conversation, and a step whose control is missing fails the run,
+so it doubles as an end-to-end test of the UI.
+
+The mock enforces the daily cap and the entitlement check with the same codes
+the server uses (`cap_reached` 429, `not_entitled` 402), so those branches are
+exercised in mock mode rather than only in production.
+
 ## Billing
 
 `lib/billing.ts` is the seam. `MockBillingProvider` ships today — real latency,
@@ -150,3 +164,8 @@ npm run e2e                       # end-to-end against the emulator
 
 Server lives under `functions/`; types shared with the client are in
 `server-shared/`. Never commit secrets — see `.gitignore`.
+
+`.github/workflows/checks.yml` runs all of the above on every pull request and
+on every push to `main`, plus `check:rules`, `content:build` and the emulator
+e2e suite. The emulator job needs JDK 21 and runs the seed and the assertions
+inside one `emulators:exec` session, because the emulator is in-memory.

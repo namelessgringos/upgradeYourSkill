@@ -21,7 +21,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # 24, not 22. @firebase/auth declares a peer on async-storage ^1.18.1
+          # while Expo SDK 54 requires 2.2.0. npm 11 (Node 24+) dedupes to
+          # 2.2.0, which is what package-lock.json records; npm 10 tries to add
+          # a nested 1.24.0 that the lockfile does not contain, and `npm ci`
+          # refuses. Match the resolver the lockfile was generated with.
+          node-version: 24
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -57,7 +62,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # 24, not 22. @firebase/auth declares a peer on async-storage ^1.18.1
+          # while Expo SDK 54 requires 2.2.0. npm 11 (Node 24+) dedupes to
+          # 2.2.0, which is what package-lock.json records; npm 10 tries to add
+          # a nested 1.24.0 that the lockfile does not contain, and `npm ci`
+          # refuses. Match the resolver the lockfile was generated with.
+          node-version: 24
           cache: npm
           cache-dependency-path: |
             package-lock.json
