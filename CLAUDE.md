@@ -23,9 +23,15 @@ Decided (see `docs/IMPLEMENTATION_PLAN.md` for the full rationale):
 
 - **Client:** React Native + Expo (SDK 54), TypeScript, Expo Router — the same
   stack as the Sudoku app, so the design system ports directly.
-- **Design system:** reused from the Sudoku app. Tokens live in
-  `constants/theme.ts`; the guide is `docs/DESIGN_SYSTEM.md`. Do not introduce a
-  second design language or a second framework.
+- **Design system:** `react-native-paper` (Material Design 3), themed with the
+  paper-and-ink palette so it reads as the app's own warm skin, not stock
+  Material. The theme is `constants/paperTheme.ts`; the colour source of truth
+  is still `JournalColors` in `constants/theme.ts`, and the design language is
+  documented in `docs/DESIGN_SYSTEM.md`. (Decided 2026-07-23, replacing the
+  hand-rolled Sudoku primitives — screens are migrating component by component.)
+  The old rule stands in spirit: **one** component framework, **one** palette.
+  Do not add a third design language, and do not hand-roll a component Paper
+  already provides.
 - **Server:** Firebase — Cloud Functions (prompt assembly, entitlement,
   metering, provider abstraction) + Firestore (skills, entitlements, usage) +
   Firebase Auth (email/password). The client is a thin shell.

@@ -23,6 +23,12 @@ const OUT = '.shots';
  * capturing the wrong screen.
  */
 const FLOWS = {
+  async openHelp(page) {
+    await page.getByRole('button', { name: 'Open help' }).click({ force: true });
+    await page.waitForTimeout(700);
+    await page.getByText('What is a skill?').click();
+    await page.waitForTimeout(500);
+  },
   async purchase(page) {
     await page.getByText(/Subscribe · \$/).click();
     await page.waitForTimeout(2500);
@@ -44,6 +50,7 @@ const SHOTS = [
   ['membership-pro', '/(tabs)/membership', 'pro'],
   ['membership-purchased', '/(tabs)/membership', 'free', 'purchase'],
   ['settings-free', '/(tabs)/settings', 'free'],
+  ['mascot-help', '/(tabs)/settings', 'free', 'openHelp'],
   ['settings-pro', '/(tabs)/settings', 'pro'],
   ['skill-unlocked', '/skill/strength', 'free'],
   ['skill-locked', '/skill/negotiation', 'free'],
