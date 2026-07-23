@@ -1,0 +1,321 @@
+<title>10 запитань для тренера</title>
+<style>
+  :root {
+    --bg: #eef0ec;
+    --surface: #ffffff;
+    --surface-2: #e6e9e2;
+    --ink: #16211c;
+    --muted: #5c6b62;
+    --accent: #c97a3d;
+    --accent-ink: #7a4420;
+    --accent-2: #2f6b4f;
+    --line: rgba(22, 33, 28, 0.14);
+    --shadow: rgba(22, 33, 28, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101815;
+      --surface: #16211c;
+      --surface-2: #1c2822;
+      --ink: #eaefe9;
+      --muted: #93a399;
+      --accent: #e3a05a;
+      --accent-ink: #f6dcb8;
+      --accent-2: #5fa982;
+      --line: rgba(234, 239, 233, 0.16);
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101815;
+    --surface: #16211c;
+    --surface-2: #1c2822;
+    --ink: #eaefe9;
+    --muted: #93a399;
+    --accent: #e3a05a;
+    --accent-ink: #f6dcb8;
+    --accent-2: #5fa982;
+    --line: rgba(234, 239, 233, 0.16);
+    --shadow: rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0ec;
+    --surface: #ffffff;
+    --surface-2: #e6e9e2;
+    --ink: #16211c;
+    --muted: #5c6b62;
+    --accent: #c97a3d;
+    --accent-ink: #7a4420;
+    --accent-2: #2f6b4f;
+    --line: rgba(22, 33, 28, 0.14);
+    --shadow: rgba(22, 33, 28, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    padding: clamp(24px, 6vw, 72px) 20px 96px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .page {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 3px;
+    width: fit-content;
+  }
+
+  h1 {
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    font-size: clamp(28px, 5vw, 38px);
+    line-height: 1.15;
+    margin: 12px 0 0;
+    text-wrap: balance;
+  }
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .intro p {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--muted);
+    font-size: 16px;
+  }
+
+  .intro p strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .rule {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 0;
+  }
+
+  .questions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .q {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 16px;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .q:last-child { border-bottom: none; }
+
+  .q-num {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: var(--accent-ink);
+    padding-top: 3px;
+  }
+
+  .q-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .q-title {
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    font-size: 19px;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  .q-help {
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.55;
+    max-width: 58ch;
+  }
+
+  .closing {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 24px 26px;
+    box-shadow: 0 1px 2px var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .closing h2 {
+    font-family: ui-serif, Georgia, serif;
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .closing p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 58ch;
+  }
+
+  footer {
+    color: var(--muted);
+    font-size: 12.5px;
+    text-align: center;
+  }
+
+  @media (max-width: 420px) {
+    .q { grid-template-columns: 28px 1fr; gap: 12px; }
+    .q-num { font-size: 13px; }
+  }
+</style>
+
+<div class="page">
+  <div class="intro">
+    <span class="eyebrow">10 запитань · 10 хвилин</span>
+    <h1>Як ти насправді ведеш клієнтів — а не як би це описав</h1>
+    <p>
+      Думаю над інструментом для тренерів — <strong>не</strong> та частина застосунку з
+      фітнес-гайдами, а закулісна частина: ведення клієнтів, їхній прогрес, програми
+      тренувань, все це. Перш ніж щось будувати, хочу зрозуміти, як ти це робиш зараз,
+      з усіма недоліками.
+    </p>
+    <p>
+      Немає неправильних відповідей, не треба звучати організовано. Якщо чесна відповідь —
+      «блокнот і моя пам'ять» — це саме те, що треба почути. Відповідай як зручніше —
+      текстом, голосовим, тезами.
+    </p>
+  </div>
+
+  <hr class="rule" />
+
+  <div class="questions">
+    <div class="q">
+      <div class="q-num">01</div>
+      <div class="q-body">
+        <div class="q-title">Проведи мене через нового клієнта від початку до кінця.</div>
+        <div class="q-help">Від першої сесії до моменту, коли все «записано» десь —
+          нотатки, папка, таблиця, що завгодно. Що ти насправді фіксуєш, і де це в
+          підсумку опиняється?</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">02</div>
+      <div class="q-body">
+        <div class="q-title">Як ти оновлюєш інформацію про клієнта пізніше?</div>
+        <div class="q-help">Скажімо, змінилась ціль, з'явилась травма, змінилась вага.
+          Як ти це змінюєш? Легко чи бісить?</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">03</div>
+      <div class="q-body">
+        <div class="q-title">Якби я запитав «як цей клієнт почувається порівняно з 3 місяцями тому» — куди б ти реально пішов дивитись?</div>
+        <div class="q-help">Де живе ця історія, і скільки часу зайняло б чесно
+          відповісти?</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">04</div>
+      <div class="q-body">
+        <div class="q-title">Згадай останню програму, яку ти складав для когось.</div>
+        <div class="q-help">Починав з чистого аркуша, чи копіював/підправляв щось із
+          минулого? Де взагалі живуть твої програми/тренування?</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">05</div>
+      <div class="q-body">
+        <div class="q-title">Як ти відстежуєш, з ким і коли в тебе сесія?</div>
+        <div class="q-help">Календар, таск-менеджер, переписка, чи просто пам'ять?
+          Те саме питання про нагадування клієнту.</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">06</div>
+      <div class="q-body">
+        <div class="q-title">Ведеш якісь таблиці (Excel) для клієнтів?</div>
+        <div class="q-help">Що там насправді — тренування, оплати, заміри? Хтось інший
+          їх бачить чи чіпає?</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">07</div>
+      <div class="q-body">
+        <div class="q-title">Пробував колись платний застосунок для ведення клієнтів/тренувань?</div>
+        <div class="q-help">Що сталось — досі користуєшся? Якщо кинув — чому?</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">08</div>
+      <div class="q-body">
+        <div class="q-title">Коли рахуєш повторення/підходи або перевіряєш техніку — як ти це фіксуєш зараз?</div>
+        <div class="q-help">Телефон, папір, просто дивишся і запам'ятовуєш — що завгодно
+          чесне.</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">09</div>
+      <div class="q-body">
+        <div class="q-title">Яка найбільш дратівлива, повторювана частина тижня, що не є самим тренуванням?</div>
+        <div class="q-help">Рутина, яку б ти видалив зі свого життя, якби міг.</div>
+      </div>
+    </div>
+
+    <div class="q">
+      <div class="q-num">10</div>
+      <div class="q-body">
+        <div class="q-title">Якби телефон здох прямо зараз і ти втратив усі нотатки й таблиці — що реально було б шкода втратити?</div>
+        <div class="q-help">Це показує, що цінне, а що тримаєш просто за звичкою.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="closing">
+    <h2>Це все — 10.</h2>
+    <p>
+      Відповідай як зручніше, пропускай, що не стосується, і не переймайся
+      формулюваннями. Чесно і по-простому краще, ніж гладко. Дякую, що допомагаєш
+      зробити це правильно перед тим, як я почну будувати.
+    </p>
+  </div>
+
+  <footer>Персона тренера — інтерв'ю для збору вимог</footer>
+</div>
