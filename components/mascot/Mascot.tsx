@@ -32,6 +32,7 @@ import {
   type MascotBrain,
   type MascotLocale,
 } from './brain';
+import { mascotHidden, subscribeScroll } from './scrollSignal';
 
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 
@@ -49,6 +50,11 @@ export function Mascot({ brain = staticBrain }: { brain?: MascotBrain }) {
   // opens in the device language; otherwise English is the only choice.
   const otherLocale = deviceMascotLocale();
   const [lang, setLang] = useState<MascotLocale>(otherLocale ?? 'en');
+
+  // Drop the touch target while the mascot is faded out for scrolling, so a
+  // quick tap lands on the content underneath it instead of on the creature.
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => subscribeScroll(setHidden), []);
 
   const bob = useSharedValue(0);
   const breathe = useSharedValue(1);
@@ -100,7 +106,11 @@ export function Mascot({ brain = staticBrain }: { brain?: MascotBrain }) {
   }, [reduceMotion, bob, breathe, blink]);
 
   const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: bob.value }, { scale: breathe.value * press.value }],
+    opacity: 1 - mascotHidden.value,
+    transform: [
+      { translateY: bob.value + mascotHidden.value * 28 },
+      { scale: breathe.value * press.value * (1 - mascotHidden.value * 0.3) },
+    ],
   }));
   const eyeProps = useAnimatedProps(() => ({ ry: EYE_RY * blink.value }));
 
@@ -119,7 +129,10 @@ export function Mascot({ brain = staticBrain }: { brain?: MascotBrain }) {
 
   return (
     <>
-      <Animated.View style={[styles.dock, containerStyle]} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.dock, containerStyle]}
+        pointerEvents={hidden ? 'none' : 'box-none'}
+      >
         <Pressable
           onPress={onPress}
           accessibilityRole="button"
