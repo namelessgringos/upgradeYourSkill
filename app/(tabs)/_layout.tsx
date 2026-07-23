@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Mascot } from '@/components/mascot/Mascot';
 import { JournalColors } from '@/constants/theme';
 
 function TabIcon({ glyph, color }: { glyph: string; color: string }) {
@@ -8,7 +9,8 @@ function TabIcon({ glyph, color }: { glyph: string; color: string }) {
 
 export default function TabsLayout() {
   return (
-    <Tabs
+    <View style={styles.root}>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: JournalColors.tabActive,
@@ -35,11 +37,14 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => <TabIcon glyph="⚙️" color={color} />,
         }}
       />
-    </Tabs>
+      </Tabs>
+      <Mascot />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   bar: {
     backgroundColor: JournalColors.white,
     borderTopColor: JournalColors.gridLine,
