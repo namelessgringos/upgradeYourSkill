@@ -13,7 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
-import { List, Modal, Portal, Text, useTheme } from 'react-native-paper';
+import { List, Modal, Portal, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 import Animated, {
   Easing,
   useAnimatedProps,
@@ -26,7 +26,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 import { haptics } from '@/lib/haptics';
-import { staticBrain, type MascotBrain } from './brain';
+import {
+  deviceMascotLocale,
+  staticBrain,
+  type MascotBrain,
+  type MascotLocale,
+} from './brain';
 
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 
@@ -38,6 +43,12 @@ export function Mascot({ brain = staticBrain }: { brain?: MascotBrain }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
+
+  // The device language, if the mascot speaks it and it is not English.
+  // When there is one, the sheet offers a two-way English/device toggle and
+  // opens in the device language; otherwise English is the only choice.
+  const otherLocale = deviceMascotLocale();
+  const [lang, setLang] = useState<MascotLocale>(otherLocale ?? 'en');
 
   const bob = useSharedValue(0);
   const breathe = useSharedValue(1);
@@ -102,7 +113,9 @@ export function Mascot({ brain = staticBrain }: { brain?: MascotBrain }) {
     setOpen(true);
   };
 
-  const suggestions = brain.suggestions();
+  const content = brain.content(lang);
+  const enLabel = brain.content('en').label;
+  const otherLabel = otherLocale ? brain.content(otherLocale).label : null;
 
   return (
     <>
@@ -145,14 +158,31 @@ export function Mascot({ brain = staticBrain }: { brain?: MascotBrain }) {
           contentContainerStyle={[styles.sheet, { backgroundColor: theme.colors.surface }]}
         >
           <View style={styles.handle} />
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            Need a hand?
-          </Text>
+          <View style={styles.sheetHead}>
+            <Text variant="titleMedium" style={styles.sheetTitle}>
+              {lang === 'uk' ? 'Потрібна допомога?' : 'Need a hand?'}
+            </Text>
+            {otherLocale && otherLabel && (
+              <SegmentedButtons
+                value={lang}
+                onValueChange={(v) => {
+                  haptics.tap();
+                  setLang(v as MascotLocale);
+                  setExpanded(null);
+                }}
+                density="small"
+                buttons={[
+                  { value: 'en', label: enLabel },
+                  { value: otherLocale, label: otherLabel },
+                ]}
+              />
+            )}
+          </View>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            {brain.greeting}
+            {content.greeting}
           </Text>
           <View style={styles.list}>
-            {suggestions.map((item, i) => (
+            {content.suggestions.map((item, i) => (
               <List.Accordion
                 key={item.question}
                 title={item.question}
@@ -190,6 +220,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: 'rgba(0,0,0,0.15)',
     marginBottom: 8,
+  },
+  sheetHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   sheetTitle: { fontWeight: '800' },
   list: { marginTop: 8 },
