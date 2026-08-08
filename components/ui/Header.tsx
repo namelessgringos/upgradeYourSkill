@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Fonts, JournalColors, Spacing } from '@/constants/theme';
+import { StyleSheet, View } from 'react-native';
+import { IconButton, Text } from 'react-native-paper';
+import { Fonts, Spacing } from '@/constants/theme';
 
 interface Props {
   title: string;
@@ -8,17 +9,16 @@ interface Props {
   right?: React.ReactNode;
 }
 
+/** In-flow header row (kept inside Screen's safe area, not a Paper Appbar). */
 export function Header({ title, showBack = false, right }: Props) {
   return (
     <View style={styles.bar}>
       <View style={styles.side}>
         {showBack && (
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back}>
-            <Text style={styles.chevron}>‹</Text>
-          </Pressable>
+          <IconButton icon="chevron-left" size={28} onPress={() => router.back()} style={styles.back} />
         )}
       </View>
-      <Text style={styles.title} numberOfLines={1}>
+      <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
         {title}
       </Text>
       <View style={[styles.side, styles.right]}>{right}</View>
@@ -27,22 +27,14 @@ export function Header({ title, showBack = false, right }: Props) {
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    gap: Spacing.sm,
-  },
+  bar: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, gap: Spacing.sm },
   side: { width: 44, justifyContent: 'center' },
   right: { alignItems: 'flex-end' },
-  back: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  chevron: { fontSize: 34, lineHeight: 34, color: JournalColors.inkBrown },
+  back: { margin: 0 },
   title: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 20,
     fontWeight: '800',
-    color: JournalColors.inkBlack,
     fontFamily: Fonts?.serif,
   },
 });

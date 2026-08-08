@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
-import { Elevation, JournalColors, Radius, Spacing } from '@/constants/theme';
+import { Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { Surface, useTheme } from 'react-native-paper';
+import { Spacing } from '@/constants/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -8,9 +9,16 @@ interface Props {
   muted?: boolean;
 }
 
+/** Paper Surface with the app's padding, keeping the old Card prop shape. */
 export function Card({ children, onPress, style, muted = false }: Props) {
+  const theme = useTheme();
   const content = (
-    <View style={[styles.card, muted && styles.muted, style]}>{children}</View>
+    <Surface
+      elevation={1}
+      style={[styles.card, muted && { backgroundColor: theme.colors.surfaceVariant }, style]}
+    >
+      {children}
+    </Surface>
   );
   if (onPress) {
     return (
@@ -23,14 +31,6 @@ export function Card({ children, onPress, style, muted = false }: Props) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: JournalColors.white,
-    borderColor: JournalColors.gridLineBold,
-    borderWidth: 1.5,
-    borderRadius: Radius.card,
-    padding: Spacing.lg,
-    ...Elevation.card,
-  },
-  muted: { backgroundColor: JournalColors.paperDark },
+  card: { borderRadius: 12, padding: Spacing.lg },
   pressed: { opacity: 0.85 },
 });

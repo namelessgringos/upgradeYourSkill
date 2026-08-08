@@ -63,6 +63,32 @@ gives merchant-of-record coverage today.
       `LEGAL_PAGES_PUBLISHED = true`.
 - [ ] Support contact address that a real person reads — App Review checks it.
 
+## EAS dev build cutover (decided 2026-07-23 — do this next)
+
+Moving off Expo Go to an EAS development build. This unlocks the three native
+things v1 needs: Pulsar haptics, Software Mansion; real Google/Apple OAuth; and
+store IAP. `eas.json` is committed with `development` / `development-simulator`
+/ `preview` / `production` profiles. `expo-dev-client` is installed.
+
+The build itself is interactive and needs your Expo account, so it is yours to
+run — the `!` prefix runs it in this session:
+
+- [ ] `! npx eas-cli login` — or `! npx eas-cli whoami` to check.
+- [ ] `! npx eas-cli build:configure` — first time only, links an EAS project
+      and writes the project id into `app.json`.
+- [ ] `! npx eas-cli build --profile development --platform ios` (and/or
+      `--platform android`). ~10–20 min in the cloud.
+- [ ] Install the build on the device (QR / link EAS gives you). From then on
+      you run `npx expo start --dev-client`, **not** Expo Go.
+- [ ] For the iOS simulator instead: `--profile development-simulator`.
+
+**Pulsar is the last flip, not the first.** `react-native-pulsar` is a native
+module — adding it breaks Expo Go immediately. So it goes in only once the dev
+build above exists and installs cleanly, otherwise there is a ~20-minute window
+with nothing to test on. `lib/haptics.ts` is already the seam: install Pulsar,
+add a Pulsar engine there, swap the one export line, rebuild. Nothing else
+changes.
+
 ## App Store (you already have the Apple Developer Program)
 
 - [ ] App record in App Store Connect, bundle ID matching `app.json`.
@@ -72,7 +98,8 @@ gives merchant-of-record coverage today.
 - [ ] Auto-renewable subscription product, one group, $9.99 tier.
 - [ ] Subscription display name, description and review screenshot.
 - [ ] App privacy questionnaire (data collection disclosure).
-- [ ] EAS build profile + dev build — **IAP does not run in Expo Go.**
+- [ ] EAS build profile + dev build — **IAP does not run in Expo Go.** (See
+      the EAS dev build cutover section above — `eas.json` already exists.)
 - [ ] TestFlight build for sandbox purchase testing.
 
 ## Google Play (not started — no account yet)

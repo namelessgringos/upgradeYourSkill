@@ -23,6 +23,20 @@ const OUT = '.shots';
  * capturing the wrong screen.
  */
 const FLOWS = {
+  async openHelp(page) {
+    // Language-agnostic: 'Open help' is the accessibility label in every
+    // locale. Opens the sheet; the greeting, question list and language toggle
+    // are all visible without expanding anything.
+    await page.getByRole('button', { name: 'Open help' }).click({ force: true });
+    await page.waitForTimeout(800);
+  },
+  async scrollHide(page) {
+    // Scroll, then capture inside the ~900ms hide window to prove the mascot
+    // fades out of the way rather than sitting on the button below it.
+    await page.mouse.move(200, 400);
+    await page.mouse.wheel(0, 600);
+    await page.waitForTimeout(250);
+  },
   async purchase(page) {
     await page.getByText(/Subscribe · \$/).click();
     await page.waitForTimeout(2500);
@@ -40,10 +54,15 @@ const SHOTS = [
   ['home-free', '/(tabs)', 'free'],
   ['home-pro', '/(tabs)', 'pro'],
   ['membership-free', '/(tabs)/membership', 'free'],
+  ['membership-scrolling', '/(tabs)/membership', 'free', 'scrollHide'],
   ['membership-trial', '/(tabs)/membership', 'trial'],
   ['membership-pro', '/(tabs)/membership', 'pro'],
   ['membership-purchased', '/(tabs)/membership', 'free', 'purchase'],
   ['settings-free', '/(tabs)/settings', 'free'],
+  ['mascot-help', '/(tabs)/settings', 'free', 'openHelp'],
+  // Same screen with the device language set to Ukrainian, so the mascot opens
+  // in Ukrainian and shows the English/Українська toggle.
+  ['mascot-help-uk', '/(tabs)/settings', 'free', 'openHelp', 'uk-UA'],
   ['settings-pro', '/(tabs)/settings', 'pro'],
   ['skill-unlocked', '/skill/strength', 'free'],
   ['skill-locked', '/skill/negotiation', 'free'],
@@ -178,8 +197,13 @@ if (journeyMode) {
 }
 
 let failed = 0;
-for (const [name, route, preset, flow] of wanted) {
-  const page = await context.newPage();
+for (const [name, route, preset, flow, locale] of wanted) {
+  // A non-default locale needs its own context (locale is fixed at creation),
+  // so expo-localization reads it as the device language.
+  const ctx = locale
+    ? await browser.newContext({ ...devices['iPhone 14 Pro'], isMobile: false, locale })
+    : context;
+  const page = await ctx.newPage();
   const url = `${BASE}${route}?mock=${preset}`;
   try {
     await page.goto(url, { waitUntil: 'networkidle', timeout: 45_000 });
@@ -193,6 +217,7 @@ for (const [name, route, preset, flow] of wanted) {
     console.error(`✗ ${name} — ${err.message.split('\n')[0]}`);
   }
   await page.close();
+  if (locale) await ctx.close();
 }
 
 await browser.close();

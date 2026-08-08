@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
+import { notifyScroll } from '@/components/mascot/scrollSignal';
 import { JournalColors, Spacing } from '@/constants/theme';
 
 interface Props {
@@ -25,6 +26,8 @@ export function Screen({
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, inner]}
           keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          onScroll={notifyScroll}
         >
           {children}
         </ScrollView>
