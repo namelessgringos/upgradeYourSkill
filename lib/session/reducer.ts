@@ -1,4 +1,4 @@
-import { idleTimer } from './timer';
+import { elapsedMs, idleTimer, restElapsedMs } from './timer';
 import type { SessionState, TrainingStyle } from './types';
 
 export type SessionAction =
@@ -128,7 +128,9 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       return { ...state, weight: Math.max(0, action.weight) };
 
     case 'startRest':
-      return { ...state, restStartedAt: action.now };
+      // Stored as a session-elapsed offset, not the epoch timestamp — see
+      // the `restStartedAt` doc comment in types.ts.
+      return { ...state, restStartedAt: elapsedMs(state.timer, action.now) };
 
     case 'completeSet': {
       if (state.timer.status !== 'running') return state;
@@ -143,7 +145,10 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
             exerciseName: state.currentExerciseName,
             reps: state.reps,
             weight: state.weight,
-            restMs: state.restStartedAt === null ? null : action.now - state.restStartedAt,
+            restMs:
+              state.restStartedAt === null
+                ? null
+                : restElapsedMs(state.timer, state.restStartedAt, action.now),
             completedAt: action.now,
           },
         ],

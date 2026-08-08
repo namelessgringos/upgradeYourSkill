@@ -2,12 +2,15 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Surface, Text } from 'react-native-paper';
 import { Spacing } from '@/constants/theme';
 import { useSession } from '@/lib/session/SessionProvider';
-import { formatElapsed } from '@/lib/session/timer';
+import { formatElapsed, restElapsedMs } from '@/lib/session/timer';
 
 /**
  * Counts up from `state.restStartedAt` using the shared clock — never its
- * own interval. It clears itself the moment `completeSet` fires, because the
- * reducer resets `restStartedAt` to null on that action.
+ * own interval. `restStartedAt` is a session-elapsed offset, not an epoch
+ * timestamp, so `restElapsedMs` derives the displayed value the same way the
+ * reducer derives the recorded one: a pause mid-rest is excluded from both.
+ * It clears itself the moment `completeSet` fires, because the reducer resets
+ * `restStartedAt` to null on that action.
  */
 export function RestStopwatch({ now }: { now: number }) {
   const { state, dispatch } = useSession();
@@ -23,7 +26,9 @@ export function RestStopwatch({ now }: { now: number }) {
           Rest
         </Text>
         <Text variant="headlineSmall" style={styles.value}>
-          {restStartedAt === null ? '—' : formatElapsed(Math.max(0, now - restStartedAt))}
+          {restStartedAt === null
+            ? '—'
+            : formatElapsed(restElapsedMs(state.timer, restStartedAt, now))}
         </Text>
         <Button
           mode={resting ? 'outlined' : 'contained'}

@@ -148,6 +148,18 @@ describe('completeSet', () => {
     expect(state.restStartedAt).toBeNull();
   });
 
+  it('excludes a pause spanning the rest from the recorded duration', () => {
+    // Rest starts, then the session is immediately paused for two full
+    // minutes, then resumed and the set is completed 15s later. Only the 15s
+    // of actually-elapsed rest should be recorded — not the 2:15 of
+    // wall-clock time that passed while the rest clock was showing.
+    let state = sessionReducer(readyToLog(), { type: 'startRest', now: T0 + 10_000 });
+    state = sessionReducer(state, { type: 'pause', now: T0 + 10_000 });
+    state = sessionReducer(state, { type: 'resume', now: T0 + 130_000 }); // 120s pause
+    state = sessionReducer(state, { type: 'completeSet', now: T0 + 145_000 }); // +15s
+    expect(state.sets[0].restMs).toBe(15_000);
+  });
+
   it('is rejected while paused — the clock is not running, so neither is the work', () => {
     const paused = sessionReducer(readyToLog(), { type: 'pause', now: T0 + 5000 });
     expect(sessionReducer(paused, { type: 'completeSet', now: T0 + 6000 })).toBe(paused);

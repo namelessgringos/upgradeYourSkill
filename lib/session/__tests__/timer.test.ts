@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { elapsedMs, formatElapsed, idleTimer } from '../timer';
+import { elapsedMs, formatElapsed, idleTimer, restElapsedMs } from '../timer';
 import type { TimerState } from '../types';
 
 const T0 = 1_700_000_000_000;
@@ -46,6 +46,28 @@ describe('elapsedMs', () => {
 
   it('never returns a negative value if the clock jumps backwards', () => {
     expect(elapsedMs(running(), T0 - 5000)).toBe(0);
+  });
+});
+
+describe('restElapsedMs', () => {
+  it('is the gap between the rest offset and current elapsed while running', () => {
+    const timer = running();
+    // Rest began at 10s of session-elapsed time; 25s of session-elapsed time
+    // have now passed, so 15s of rest have been taken.
+    expect(restElapsedMs(timer, 10_000, T0 + 25_000)).toBe(15_000);
+  });
+
+  it('excludes a pause that happened during the rest', () => {
+    // Rest started when 10s had elapsed. Then a 2-minute pause happened, and
+    // afterwards the clock resumed and ran for 15 more seconds before the set
+    // completed at wall-clock T0 + 25s + 120s pause = T0 + 145s.
+    const timer = running({ accumulatedPauseMs: 120_000 });
+    expect(restElapsedMs(timer, 10_000, T0 + 145_000)).toBe(15_000);
+  });
+
+  it('never returns a negative value', () => {
+    const timer = running();
+    expect(restElapsedMs(timer, 50_000, T0 + 10_000)).toBe(0);
   });
 });
 

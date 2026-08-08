@@ -24,6 +24,16 @@ export function elapsedMs(timer: TimerState, now: number): number {
   return Math.max(0, end - timer.startedAt - timer.accumulatedPauseMs);
 }
 
+/**
+ * Ms of rest elapsed since `restStartedAt`, a session-elapsed offset (as
+ * returned by `elapsedMs`, NOT an epoch timestamp) — so pausing mid-rest
+ * does not inflate the recorded or displayed rest length. Both the reducer
+ * and the on-screen stopwatch derive rest through this single function.
+ */
+export function restElapsedMs(timer: TimerState, restStartedAt: number, now: number): number {
+  return Math.max(0, elapsedMs(timer, now) - restStartedAt);
+}
+
 export function formatElapsed(ms: number): string {
   const total = Math.floor(Math.max(0, ms) / 1000);
   const seconds = total % 60;

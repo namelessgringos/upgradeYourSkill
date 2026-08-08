@@ -75,7 +75,13 @@ export interface SessionState {
   sets: CompletedSet[];
   /** Null for gym sessions. */
   intervals: IntervalConfig | null;
-  /** Epoch ms the current rest began. Null when not resting. */
+  /**
+   * Session-elapsed ms (as returned by `elapsedMs`, excluding paused time) at
+   * which the current rest began — NOT an epoch timestamp. Storing an offset
+   * on the same derived timeline as everything else means a pause during the
+   * rest is automatically excluded when the rest duration is later computed.
+   * Null when not resting.
+   */
   restStartedAt: number | null;
   /** 1-10, captured on the summary screen. Null until rated. */
   difficulty: number | null;
