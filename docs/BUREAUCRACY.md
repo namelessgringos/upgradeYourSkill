@@ -51,6 +51,24 @@ gives merchant-of-record coverage today.
 - [ ] `ANTHROPIC_API_KEY` in Secret Manager.
 - [ ] Deploy functions; note the webhook URL.
 
+### Native SDK config (blocks the session dashboard's persistence stage only)
+
+Added 2026-08-08. The live session dashboard needs real offline persistence —
+a session must survive a gym basement with no signal. The Firebase **JS** SDK
+cannot do that in React Native: its persistent cache is IndexedDB-backed and
+there is no IndexedDB on a phone. So Firestore moves to
+`@react-native-firebase`, which needs native config files.
+
+- [ ] Register an **iOS app** in the Firebase project → download
+      `GoogleService-Info.plist`.
+- [ ] Register an **Android app** → download `google-services.json`.
+- [ ] Commit both (they are not secrets — they identify the project, they do not
+      authorise anything; access is controlled by security rules).
+
+The Spark (free) plan is enough for this — Blaze is only needed for Functions
+outbound. Everything up to the persistence stage builds against an in-memory
+store and does not wait for any of it.
+
 ## Legal pages (blocks any checkout, both surfaces)
 
 - [ ] Privacy policy published at a stable URL. Must cover: what we send to
