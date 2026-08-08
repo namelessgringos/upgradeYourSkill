@@ -130,9 +130,25 @@ wins, hosting it properly is a separate decision.
 
 ## New direction: the live training session dashboard
 
-Specced 2026-08-08 →
-[`superpowers/specs/2026-08-08-live-session-dashboard-design.md`](./superpowers/specs/2026-08-08-live-session-dashboard-design.md).
-**Design approved, implementation plan not yet written.**
+Specced and **Stage A built** 2026-08-08 →
+[spec](./superpowers/specs/2026-08-08-live-session-dashboard-design.md) ·
+[plan](./superpowers/plans/2026-08-08-live-session-dashboard.md).
+
+**Stage A is on `feat/live-session-dashboard`** (18 commits): the pure session
+engine — elapsed time, interval engine, state machine — plus the exercise
+library, an in-memory store behind a `SessionStore` interface, and all three
+screens (setup, live, summary) for gym, boxing and HIIT. 80 pure-logic tests,
+typecheck and lint clean.
+
+**Nothing in the UI has ever been run.** No simulator was available at any point,
+so the screens are verified only by types, lint and pure-logic tests. A device
+walkthrough is the first thing to do, and it is tracked in Todoist E17.
+
+**Boxing mode is silent** — there is no audio asset in the repo, so the bell is a
+guarded no-op until one is added. Also tracked.
+
+Stage B (Tasks 10-12: native Firebase SDK, security rules, Firestore store)
+is blocked on the native config in [`BUREAUCRACY.md`](./BUREAUCRACY.md).
 
 A live session screen inside this app: start a session, timer runs, work through
 exercises, and the whole thing is written down when you stop. Works trainer-driven
