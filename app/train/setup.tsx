@@ -38,9 +38,13 @@ export default function SessionSetup() {
 
   useEffect(() => {
     let cancelled = false;
-    store.listClients().then((list) => {
-      if (!cancelled) setClients(list);
-    });
+    store.listClients()
+      .then((list) => {
+        if (!cancelled) setClients(list);
+      })
+      .catch(() => {
+        if (!cancelled) setClients([]);
+      });
     return () => {
       cancelled = true;
     };
