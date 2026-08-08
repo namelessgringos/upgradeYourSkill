@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, IconButton, Surface, Text } from 'react-native-paper';
 import { Spacing } from '@/constants/theme';
@@ -15,6 +15,7 @@ const WEIGHT_STEP = 2.5;
 export function ExerciseCard() {
   const { state, dispatch, store } = useSession();
   const [pickerVisible, setPickerVisible] = useState(false);
+  const selectedExerciseIdRef = useRef<string | null>(null);
 
   const completedForExercise =
     state.currentExerciseId === null
@@ -23,9 +24,11 @@ export function ExerciseCard() {
 
   const handleSelect = (exercise: Exercise) => {
     setPickerVisible(false);
+    selectedExerciseIdRef.current = exercise.id;
     store
       .lastPerformance(exercise.id)
       .then((last) => {
+        if (selectedExerciseIdRef.current !== exercise.id) return;
         dispatch({
           type: 'selectExercise',
           exerciseId: exercise.id,
@@ -34,6 +37,7 @@ export function ExerciseCard() {
         });
       })
       .catch(() => {
+        if (selectedExerciseIdRef.current !== exercise.id) return;
         // No remembered numbers — still select the exercise.
         dispatch({ type: 'selectExercise', exerciseId: exercise.id, exerciseName: exercise.name });
       });
