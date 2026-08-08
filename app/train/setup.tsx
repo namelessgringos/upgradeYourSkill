@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Chip, SegmentedButtons, Surface, Text, TextInput } from 'react-native-paper';
+import { Header } from '@/components/ui/Header';
 import { Screen } from '@/components/ui/Screen';
 import { Spacing } from '@/constants/theme';
 import { BOXING_PRESET, HIIT_PRESET } from '@/lib/session/intervals';
@@ -35,6 +36,7 @@ export default function SessionSetup() {
   const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
   const [fatiguedGroups, setFatiguedGroups] = useState<string[]>([]);
   const [intervals, setIntervals] = useState<IntervalConfig | null>(presetFor('gym'));
+  const [newClientName, setNewClientName] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -88,11 +90,24 @@ export default function SessionSetup() {
     router.replace('/train/live');
   };
 
+  const onAddClient = () => {
+    const name = newClientName.trim();
+    if (name === '') return;
+    store
+      .addClient(name)
+      .then((client) => {
+        setClients((current) => [...current, client]);
+        setClientId(client.id);
+        setNewClientName('');
+      })
+      .catch(() => {
+        // Creation failed — leave the name in the field so the coach can retry.
+      });
+  };
+
   return (
     <Screen scroll contentStyle={styles.container}>
-      <Text variant="headlineMedium" style={styles.h1}>
-        New session
-      </Text>
+      <Header title="New session" showBack onBack={() => router.replace('/(tabs)')} />
 
       <SegmentedButtons value={style} onValueChange={onStyleChange} buttons={STYLE_OPTIONS} />
 
@@ -121,6 +136,18 @@ export default function SessionSetup() {
             ))}
           </View>
         )}
+        <View style={styles.addClientRow}>
+          <TextInput
+            label="Add client"
+            mode="outlined"
+            value={newClientName}
+            onChangeText={setNewClientName}
+            style={styles.addClientInput}
+          />
+          <Button mode="contained" onPress={onAddClient} disabled={newClientName.trim() === ''}>
+            Add
+          </Button>
+        </View>
       </Surface>
 
       <Surface style={styles.card} elevation={1}>
@@ -202,12 +229,13 @@ export default function SessionSetup() {
 
 const styles = StyleSheet.create({
   container: { paddingTop: Spacing.lg, gap: Spacing.md, paddingBottom: 120 },
-  h1: { fontWeight: '800' },
   card: { borderRadius: 12, padding: Spacing.lg, gap: Spacing.sm },
   cardTitle: { fontWeight: '800', opacity: 0.7 },
   skipButton: { alignSelf: 'stretch' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { marginBottom: 4 },
+  addClientRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
+  addClientInput: { flex: 1 },
   intervalRow: { flexDirection: 'row', gap: Spacing.sm },
   intervalInput: { flex: 1 },
   start: { marginTop: Spacing.xs },
