@@ -3,7 +3,7 @@
 Living handoff doc. Read this first in a new session, then `CLAUDE.md` for the
 rules and `docs/BLUEPRINT.md` for scope.
 
-Last updated: 2026-07-22, end of Phase 2.
+Last updated: 2026-08-08.
 
 ---
 
@@ -11,10 +11,14 @@ Last updated: 2026-07-22, end of Phase 2.
 
 | | |
 |---|---|
-| `main` | `f8fbbd8` — Phase 1 (real Firebase backend) merged |
-| Open PR | **#2** — Phase 2, branch `feat/phase-2-content`, **awaiting review** |
+| `main` | PRs #1–#4 merged, the trainer-persona docs, and `feat/ui-paper-mascot` (react-native-paper migration, mascot, EAS dev-build config) merged 2026-08-08 |
+| Unmerged | Nothing outstanding |
 | Runs against | Firebase **emulator only**. No cloud project, no Anthropic key. |
 | LLM in use | `EchoProvider` (a stub). The Anthropic path has **never made a live call**. |
+
+Merged since the last update: **#2** Phase 2 content, **#3** billing seam + real
+settings + phone-free UI review (`lib/billing.ts`, `scripts/shots.mjs`), **#4** a
+fourth skill (Labour, Birth & the First Weeks).
 
 The app works end to end on a phone or simulator: sign-in → skills from
 Firestore → guide gated by a server-side entitlement check → chat through a
@@ -71,13 +75,7 @@ measurement; cost-per-user query.
 
 In order. Each step unblocks the one after it.
 
-### 1. Review and merge PR #2
-
-Read `functions/content/*/guide.md` first — that is the paid product. Then the
-coach prompts and safety boundaries in `coach.md`, which constrain what the
-coach will say about injuries, investments, and contracts.
-
-### 2. Get an Anthropic key and run the real evals
+### 1. Get an Anthropic key and run the real evals
 
 ```bash
 echo 'ANTHROPIC_API_KEY=sk-ant-...' > functions/.secret.local   # gitignored
@@ -98,7 +96,7 @@ Decide per skill: does Haiku hold, or does one need Sonnet? Set it in the
 skill's `coach.md` frontmatter — model choice lives in the DB, never in code
 (rule #2).
 
-### 3. Benchmark the local models
+### 2. Benchmark the local models
 
 Requested in Phase 2, tooling is ready, no API cost.
 
@@ -107,7 +105,7 @@ ollama pull qwen3.6:35b-a3b       # MoE — ~20-22 tok/s on Apple Silicon
 npm run evals -- --provider ollama --model qwen3.6:35b-a3b
 ```
 
-Compare against the Haiku baseline from step 2. **The decisive metric is
+Compare against the Haiku baseline from step 1. **The decisive metric is
 boundary adherence, not fluency** — a coach that drifts into diagnosis is a
 liability no throughput number offsets. Dense 24–27B models run at ~4–5 tok/s
 on a Mac and are probably too slow; MoE is the category worth testing.
@@ -116,7 +114,7 @@ Note the Mac Studio is a benchmark box, not a production origin (residential
 uptime, no redundancy, weak concurrent batching on Metal). If a local model
 wins, hosting it properly is a separate decision.
 
-### 4. Then pick one
+### 3. Then pick one
 
 - **Phase 3 remainder** — soft cap: pause and let the user opt in to continue.
   Never auto-charge (rule #6). Small, and the entitlement service is already
@@ -127,6 +125,33 @@ wins, hosting it properly is a separate decision.
 - **Real Google/Apple OAuth** — needs OAuth client IDs, an Apple Developer
   account, and an EAS dev build. It stops running in Expo Go, so expect a day
   of setup friction.
+
+---
+
+## New direction: the live training session dashboard
+
+Specced 2026-08-08 →
+[`superpowers/specs/2026-08-08-live-session-dashboard-design.md`](./superpowers/specs/2026-08-08-live-session-dashboard-design.md).
+**Design approved, implementation plan not yet written.**
+
+A live session screen inside this app: start a session, timer runs, work through
+exercises, and the whole thing is written down when you stop. Works trainer-driven
+or solo, on one screen.
+
+Decided: new tab in this app · full log per session to Firestore · gym, boxing
+and HIIT in v1 · sessions attach to a client · curated seed exercise library plus
+user-added · yoga is post-MVP with its own epic.
+
+It is the first surface in the app that is a tool rather than content, and it is
+the closest thing yet to what the trainer interviews actually found — both
+trainers count reps in their heads, and session accounting was the only confirmed
+pain. See [`trainer-persona/FINDINGS.md`](./trainer-persona/FINDINGS.md).
+
+**Carrying a known debt:** the dashboard is being built ungated, with the
+subscription check deferred. Data access is auth-scoped from day one; the
+entitlement gate is not. Rule #4 says every server call checks entitlement —
+**this must be closed before any public build ships**, and it is tracked as its
+own task, not left to memory.
 
 ---
 
