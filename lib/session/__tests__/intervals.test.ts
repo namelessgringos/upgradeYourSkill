@@ -55,6 +55,29 @@ describe('intervalAt', () => {
   });
 });
 
+describe('intervalAt with a single round', () => {
+  // rounds: 1 is directly user-reachable — setup.tsx clamps the rounds input
+  // to a minimum of 1. totalDurationMs at rounds:1 equals workMs exactly (no
+  // trailing rest), so the rest phase of the only round is never entered.
+  const SINGLE_ROUND: IntervalConfig = { workMs: 10_000, restMs: 5_000, rounds: 1 };
+
+  it('starts in round 1, working, at elapsed 0', () => {
+    expect(intervalAt(SINGLE_ROUND, 0)).toEqual({ round: 1, phase: 'work', remainingMs: 10_000 });
+  });
+
+  it('counts down mid-work', () => {
+    expect(intervalAt(SINGLE_ROUND, 4_000)).toEqual({ round: 1, phase: 'work', remainingMs: 6_000 });
+  });
+
+  it('is done exactly at the total duration, without ever entering a rest phase', () => {
+    expect(intervalAt(SINGLE_ROUND, 10_000)).toEqual({ round: 1, phase: 'done', remainingMs: 0 });
+  });
+
+  it('stays done past the total duration', () => {
+    expect(intervalAt(SINGLE_ROUND, 20_000)).toEqual({ round: 1, phase: 'done', remainingMs: 0 });
+  });
+});
+
 describe('presets', () => {
   it('boxing is 3 minutes on, 1 off, 12 rounds', () => {
     expect(BOXING_PRESET).toEqual({ workMs: 180_000, restMs: 60_000, rounds: 12 });
