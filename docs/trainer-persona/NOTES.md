@@ -30,7 +30,21 @@ Question map → candidate tech:
 - Q7–Q10 (past tools, exercise tracking, pain, data criticality) →
   prioritization signal
 
+## Answers in (n=2)
+
+Two trainers answered. Synthesis: [`FINDINGS.md`](./FINDINGS.md).
+
+Headline: the scope above is too wide for what the evidence supports. Excel
+sync, program templates and backup-as-value all got contradicted directly.
+The one confirmed pain is **session accounting off the calendar** — Trainer A
+hand-built it with Claude and still cross-checks it against a paper notebook.
+Pain tracks client volume; the low-volume respondent had none at all.
+
 ## Next step
 
-Once answers are in: synthesize into a proper problem doc, then brainstorm
-the actual spec (data model, sync, MCP connectors) before any code.
+1. Three-question follow-up (packages/payment, re-ask Q4 for Trainer A, what
+   would have made them upgrade Hevy).
+2. Interview one trainer who is running a studio *now* — both respondents sit
+   at the low-volume end.
+3. Then brainstorm the spec, scoped to the session ledger + freeform client
+   notes, not the full CRM.
