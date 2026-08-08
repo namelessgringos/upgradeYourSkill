@@ -12,27 +12,7 @@ interface Props {
   store: SessionStore;
 }
 
-/**
- * Favourites and Recent aren't fields on Exercise — the store has no such
- * flag — so both are derived here from saved-session history: Recent is the
- * most recently logged exercises, Favourites the most frequently logged
- * ones. Both sections are empty for a brand-new user, which is correct.
- */
-function deriveSections(sessions: { sets: { exerciseId: string }[] }[]) {
-  const recent: string[] = [];
-  const counts = new Map<string, number>();
-  for (const session of sessions) {
-    for (const set of session.sets) {
-      counts.set(set.exerciseId, (counts.get(set.exerciseId) ?? 0) + 1);
-      if (!recent.includes(set.exerciseId)) recent.push(set.exerciseId);
-    }
-  }
-  const favourites = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([id]) => id);
-  return { recentIds: recent.slice(0, 5), favouriteIds: favourites };
-}
+const SECTION_LIMIT = 5;
 
 export function ExercisePicker({ visible, onDismiss, onSelect, store }: Props) {
   const [query, setQuery] = useState('');
@@ -55,18 +35,21 @@ export function ExercisePicker({ visible, onDismiss, onSelect, store }: Props) {
       });
 
     store
-      .listSessions()
-      .then((sessions) => {
-        if (cancelled) return;
-        const { recentIds: recent, favouriteIds: favourites } = deriveSections(sessions);
-        setRecentIds(recent);
-        setFavouriteIds(favourites);
+      .recentExercises(SECTION_LIMIT)
+      .then((list) => {
+        if (!cancelled) setRecentIds(list.map((exercise) => exercise.id));
       })
       .catch(() => {
-        if (!cancelled) {
-          setRecentIds([]);
-          setFavouriteIds([]);
-        }
+        if (!cancelled) setRecentIds([]);
+      });
+
+    store
+      .favouriteExercises(SECTION_LIMIT)
+      .then((list) => {
+        if (!cancelled) setFavouriteIds(list.map((exercise) => exercise.id));
+      })
+      .catch(() => {
+        if (!cancelled) setFavouriteIds([]);
       });
 
     return () => {

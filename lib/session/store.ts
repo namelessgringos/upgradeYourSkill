@@ -23,12 +23,54 @@ export interface SessionStore {
   saveSession(state: SessionState): Promise<SavedSession>;
   /** The numbers this user last used for an exercise, so they are not retyped weekly. */
   lastPerformance(exerciseId: string): Promise<LastPerformance | null>;
+  /**
+   * Most recently logged exercises, most recent first. Backed by a bounded
+   * query against Firestore (Stage B) — callers must not fall back to
+   * `listSessions()` to derive this themselves.
+   */
+  recentExercises(limit: number): Promise<Exercise[]>;
+  /** Most frequently logged exercises, most frequent first. Same constraint as `recentExercises`. */
+  favouriteExercises(limit: number): Promise<Exercise[]>;
 }
 
 export function searchExercises(exercises: Exercise[], query: string): Exercise[] {
   const needle = query.trim().toLowerCase();
   if (needle === '') return exercises;
   return exercises.filter((exercise) => exercise.name.toLowerCase().includes(needle));
+}
+
+/**
+ * Most recently logged exercise ids, most recent first.
+ *
+ * `sessions` must already be newest-session-first (as `listSessions()`
+ * returns). Within a session, sets are walked newest-first too — otherwise
+ * the earliest exercise of the newest session would sort ahead of exercises
+ * logged later in an older session.
+ */
+function deriveRecentIds(sessions: SavedSession[], limit: number): string[] {
+  const recent: string[] = [];
+  for (const session of sessions) {
+    for (let i = session.sets.length - 1; i >= 0; i -= 1) {
+      const id = session.sets[i].exerciseId;
+      if (!recent.includes(id)) recent.push(id);
+      if (recent.length >= limit) return recent;
+    }
+  }
+  return recent;
+}
+
+/** Most frequently logged exercise ids, most frequent first. */
+function deriveFavouriteIds(sessions: SavedSession[], limit: number): string[] {
+  const counts = new Map<string, number>();
+  for (const session of sessions) {
+    for (const set of session.sets) {
+      counts.set(set.exerciseId, (counts.get(set.exerciseId) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id]) => id);
 }
 
 /** Convert finished session state into the record that gets stored. */
@@ -141,5 +183,24 @@ export class InMemorySessionStore implements SessionStore {
       }
     }
     return null;
+  }
+
+  async recentExercises(limit: number): Promise<Exercise[]> {
+    const sessions = await this.listSessions();
+    return this.hydrateExercises(deriveRecentIds(sessions, limit));
+  }
+
+  async favouriteExercises(limit: number): Promise<Exercise[]> {
+    const sessions = await this.listSessions();
+    return this.hydrateExercises(deriveFavouriteIds(sessions, limit));
+  }
+
+  /** Resolve ids to full Exercise records, cloned so no internal reference escapes. */
+  private hydrateExercises(ids: string[]): Exercise[] {
+    const byId = new Map(this.exercises.map((exercise) => [exercise.id, exercise]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter((exercise): exercise is Exercise => exercise !== undefined)
+      .map((exercise) => ({ ...exercise, muscleGroups: [...exercise.muscleGroups] }));
   }
 }

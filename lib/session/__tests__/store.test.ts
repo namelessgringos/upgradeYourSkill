@@ -104,6 +104,91 @@ describe('InMemorySessionStore', () => {
     expect(await store.lastPerformance('deadlift')).toBeNull();
   });
 
+  describe('recentExercises', () => {
+    const finishedSession = (start: number, exerciseIds: string[]) => {
+      let s = sessionReducer(initialSession('gym'), { type: 'start', now: start });
+      exerciseIds.forEach((exerciseId, i) => {
+        s = sessionReducer(s, {
+          type: 'selectExercise',
+          exerciseId,
+          exerciseName: exerciseId,
+        });
+        s = sessionReducer(s, { type: 'completeSet', now: start + i + 1 });
+      });
+      return sessionReducer(s, { type: 'finish', now: start + exerciseIds.length + 10 });
+    };
+
+    it('is empty for a brand-new user', async () => {
+      expect(await store.recentExercises(5)).toEqual([]);
+    });
+
+    it('returns the most recently logged exercises, most recent first', async () => {
+      await store.saveSession(finishedSession(T0, ['back-squat', 'bench-press']));
+      await store.saveSession(finishedSession(T0 + 100_000, ['deadlift']));
+
+      const recent = await store.recentExercises(5);
+      expect(recent.map((e) => e.id)).toEqual(['deadlift', 'bench-press', 'back-squat']);
+    });
+
+    it('orders by true recency across sessions, not just newest-session-first', async () => {
+      // Older session logs squat then bench (bench is the most recent set in
+      // that session). Newest session logs only deadlift. True recency order
+      // must be: deadlift (newest session), bench (last set of the older
+      // session), squat (first set of the older session) — NOT squat sorting
+      // ahead of bench just because it was walked oldest-set-first.
+      await store.saveSession(finishedSession(T0, ['back-squat', 'bench-press']));
+      await store.saveSession(finishedSession(T0 + 100_000, ['deadlift']));
+
+      const recent = await store.recentExercises(5);
+      expect(recent.map((e) => e.id)).toEqual(['deadlift', 'bench-press', 'back-squat']);
+    });
+
+    it('respects the limit', async () => {
+      await store.saveSession(finishedSession(T0, ['back-squat', 'bench-press', 'deadlift']));
+      expect(await store.recentExercises(2)).toHaveLength(2);
+    });
+
+    it('does not duplicate an exercise logged more than once', async () => {
+      await store.saveSession(finishedSession(T0, ['back-squat', 'back-squat', 'bench-press']));
+      const recent = await store.recentExercises(5);
+      expect(recent.map((e) => e.id)).toEqual(['bench-press', 'back-squat']);
+    });
+  });
+
+  describe('favouriteExercises', () => {
+    const finishedSession = (start: number, exerciseIds: string[]) => {
+      let s = sessionReducer(initialSession('gym'), { type: 'start', now: start });
+      exerciseIds.forEach((exerciseId, i) => {
+        s = sessionReducer(s, {
+          type: 'selectExercise',
+          exerciseId,
+          exerciseName: exerciseId,
+        });
+        s = sessionReducer(s, { type: 'completeSet', now: start + i + 1 });
+      });
+      return sessionReducer(s, { type: 'finish', now: start + exerciseIds.length + 10 });
+    };
+
+    it('is empty for a brand-new user', async () => {
+      expect(await store.favouriteExercises(5)).toEqual([]);
+    });
+
+    it('returns the most frequently logged exercises, most frequent first', async () => {
+      await store.saveSession(
+        finishedSession(T0, ['back-squat', 'back-squat', 'back-squat', 'bench-press']),
+      );
+      await store.saveSession(finishedSession(T0 + 100_000, ['bench-press', 'deadlift']));
+
+      const favourites = await store.favouriteExercises(5);
+      expect(favourites.map((e) => e.id)).toEqual(['back-squat', 'bench-press', 'deadlift']);
+    });
+
+    it('respects the limit', async () => {
+      await store.saveSession(finishedSession(T0, ['back-squat', 'bench-press', 'deadlift']));
+      expect(await store.favouriteExercises(1)).toHaveLength(1);
+    });
+  });
+
   // --- Encapsulation: no internal reference should ever escape the store. ---
 
   const finishedSquatSession = (start: number) => {
