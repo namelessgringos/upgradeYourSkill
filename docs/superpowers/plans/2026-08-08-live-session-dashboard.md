@@ -16,7 +16,7 @@
 - **No prompts, skill content or system instructions in the app binary** (CLAUDE.md rule #1). Nothing in this plan touches skill content.
 - **Entitlement is deliberately deferred** (spec → Entitlement). Auth scoping is NOT deferred. Do not add a subscription check in this plan; do not skip ownership checks in security rules.
 - **Never accumulate timer ticks.** Elapsed is always derived from `startedAt` and accumulated pause. A session must show correct elapsed time after the phone has been locked for ten minutes.
-- **Pure logic files import nothing from `react`, `react-native` or `firebase`.** That constraint is what makes them testable, and it is load-bearing.
+- **The four pure-logic files — `lib/session/types.ts`, `timer.ts`, `intervals.ts`, `reducer.ts` — import nothing from `react`, `react-native` or `firebase`.** That constraint is what makes them testable without a renderer, and it is load-bearing. `useSessionClock.ts`, `SessionProvider.tsx` and everything under `components/` and `app/` are React by definition and are not covered by this rule.
 - Money values do not appear anywhere in this plan. Weight is kilograms, stored as a number.
 - Follow existing conventions: components in `components/`, shared logic in `lib/`, screens in `app/` (expo-router).
 
