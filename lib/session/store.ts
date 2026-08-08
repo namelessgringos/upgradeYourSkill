@@ -50,12 +50,23 @@ export function toSavedSession(
     endedAt,
     // Derived, so paused time is excluded exactly as the on-screen clock showed it.
     durationMs: elapsedMs(state.timer, endedAt),
-    muscleGroups: state.muscleGroups,
-    fatiguedGroups: state.fatiguedGroups,
-    sets: state.sets,
-    intervals: state.intervals,
+    muscleGroups: [...state.muscleGroups],
+    fatiguedGroups: [...state.fatiguedGroups],
+    sets: state.sets.map((set) => ({ ...set })),
+    intervals: state.intervals === null ? null : { ...state.intervals },
     difficulty: state.difficulty,
     notes: state.notes,
+  };
+}
+
+/** Copy every mutable field, so a caller can never reach the store's own record. */
+function cloneSavedSession(session: SavedSession): SavedSession {
+  return {
+    ...session,
+    muscleGroups: [...session.muscleGroups],
+    fatiguedGroups: [...session.fatiguedGroups],
+    sets: session.sets.map((set) => ({ ...set })),
+    intervals: session.intervals === null ? null : { ...session.intervals },
   };
 }
 
@@ -73,23 +84,23 @@ export class InMemorySessionStore implements SessionStore {
   constructor(private readonly ownerUid: string) {}
 
   async listExercises(): Promise<Exercise[]> {
-    return [...this.exercises];
+    return this.exercises.map((exercise) => ({ ...exercise, muscleGroups: [...exercise.muscleGroups] }));
   }
 
   async addExercise(name: string, muscleGroups: string[]): Promise<Exercise> {
     const exercise: Exercise = {
       id: localId('custom'),
       name,
-      muscleGroups,
+      muscleGroups: [...muscleGroups],
       isCustom: true,
       ownerUid: this.ownerUid,
     };
     this.exercises.push(exercise);
-    return exercise;
+    return { ...exercise, muscleGroups: [...exercise.muscleGroups] };
   }
 
   async listClients(): Promise<Client[]> {
-    return this.clients.filter((client) => !client.archived);
+    return this.clients.filter((client) => !client.archived).map((client) => ({ ...client }));
   }
 
   async addClient(name: string, notes = ''): Promise<Client> {
@@ -103,17 +114,19 @@ export class InMemorySessionStore implements SessionStore {
       archived: false,
     };
     this.clients.push(client);
-    return client;
+    return { ...client };
   }
 
   async listSessions(): Promise<SavedSession[]> {
-    return [...this.sessions].sort((a, b) => b.startedAt - a.startedAt);
+    return [...this.sessions]
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .map((session) => cloneSavedSession(session));
   }
 
   async saveSession(state: SessionState): Promise<SavedSession> {
     const saved = toSavedSession(state, localId('session'), this.ownerUid);
     this.sessions.push(saved);
-    return saved;
+    return cloneSavedSession(saved);
   }
 
   async lastPerformance(exerciseId: string): Promise<LastPerformance | null> {
