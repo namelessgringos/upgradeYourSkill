@@ -12,6 +12,7 @@ export default function TrainLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="setup" />
         <Stack.Screen name="live" />
+        <Stack.Screen name="summary" />
       </Stack>
     </SessionProvider>
   );
