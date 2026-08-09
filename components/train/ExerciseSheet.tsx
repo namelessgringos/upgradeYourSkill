@@ -2,9 +2,10 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
   BottomSheetTextInput,
+  BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { Button, IconButton, List, Text } from 'react-native-paper';
 import { JournalColors, Spacing } from '@/constants/theme';
@@ -16,6 +17,14 @@ const WEIGHT_STEP = 2.5;
 const SECTION_LIMIT = 5;
 /** How long the tick stays up before the sheet closes itself. */
 const SUCCESS_MS = 700;
+/**
+ * One height for both modes, defined once at module scope.
+ *
+ * Not derived from `mode`: changing snapPoints in the same render that opens
+ * the sheet lets gorhom re-clamp the index back to closed, which fires
+ * `onClose`, which resets the mode — and the sheet never appears.
+ */
+const SNAP_POINTS = ['75%'];
 
 /**
  * `null` is closed. `picker` opens on the exercise list; `config` opens
@@ -48,13 +57,11 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
   const successScale = useRef(new Animated.Value(0)).current;
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const snapPoints = useMemo(() => (mode === 'picker' ? ['75%'] : ['52%']), [mode]);
-
   // Drive the sheet from the mode prop so the parent stays the single source
   // of truth — the sheet's own gestures report back through onClose.
   useEffect(() => {
     if (mode === null) sheetRef.current?.close();
-    else sheetRef.current?.snapToIndex(0);
+    else sheetRef.current?.expand();
   }, [mode]);
 
   useEffect(() => {
@@ -158,6 +165,16 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
     [],
   );
 
+  // gorhom fires onClose for its own dismissals AND for our programmatic
+  // close(). Reporting a close we already know about would set the mode to a
+  // value it already holds; worse, a late-arriving one could cancel an open
+  // that has just begun.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const handleSheetClose = useCallback(() => {
+    if (modeRef.current !== null) onModeChange(null);
+  }, [onModeChange]);
+
   const completedForExercise =
     state.currentExerciseId === null
       ? 0
@@ -184,9 +201,14 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
     <BottomSheet
       ref={sheetRef}
       index={-1}
-      snapPoints={snapPoints}
+      snapPoints={SNAP_POINTS}
+      // v5 defaults this to true, which makes the sheet size to its content
+      // and quietly ignore snapPoints. A non-measuring child then yields a
+      // zero-height sheet: it opens, and nothing is visible.
+      enableDynamicSizing={false}
+      animateOnMount={false}
       enablePanDownToClose
-      onClose={() => onModeChange(null)}
+      onClose={handleSheetClose}
       backdropComponent={renderBackdrop}
       keyboardBehavior="interactive"
       android_keyboardInputMode="adjustResize"
@@ -219,7 +241,7 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
           </View>
         </BottomSheetScrollView>
       ) : (
-        <View style={styles.body}>
+        <BottomSheetView style={styles.body}>
           <View style={styles.configHeader}>
             <View style={styles.configTitleBlock}>
               <Text style={styles.title}>{state.currentExerciseName ?? 'No exercise'}</Text>
@@ -263,7 +285,7 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
               </Text>
             </View>
           )}
-        </View>
+        </BottomSheetView>
       )}
     </BottomSheet>
   );
