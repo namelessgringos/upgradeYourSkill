@@ -62,9 +62,11 @@ export default function TrainLive() {
   };
 
   /**
-   * Reopening an exercise already in the log prefills from the last set of it
-   * *in this session*, which is what the coach just did — not from the
-   * cross-session history the picker consults for a first pick.
+   * Reopening an exercise already in the log carries the weight forward from
+   * the last set of it *in this session* — what the coach just did, not the
+   * cross-session history the picker consults for a first pick. Reps are not
+   * carried: they count what has been done in the new set, and that is zero.
+   * The sheet seeds its rep target from the same history.
    */
   const onOpenExercise = (exerciseId: string, exerciseName: string) => {
     const previous = [...state.sets].reverse().find((set) => set.exerciseId === exerciseId);
@@ -73,9 +75,7 @@ export default function TrainLive() {
       type: 'selectExercise',
       exerciseId,
       exerciseName,
-      ...(previous === undefined
-        ? {}
-        : { lastReps: previous.reps, lastWeight: previous.weight }),
+      ...(previous === undefined ? {} : { lastWeight: previous.weight }),
     });
     setSheetMode('active');
   };
@@ -107,6 +107,7 @@ export default function TrainLive() {
           mode={sheetMode}
           onModeChange={onSheetModeChange}
           onExerciseChosen={() => dispatch({ type: 'stopRest' })}
+          now={now}
         />
       )}
     </View>

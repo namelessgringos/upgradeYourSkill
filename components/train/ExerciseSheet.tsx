@@ -8,16 +8,20 @@ import BottomSheet, {
 import Slider from '@react-native-community/slider';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
-import { Button, IconButton, List, Text } from 'react-native-paper';
+import { Button, Dialog, IconButton, List, Portal, Text } from 'react-native-paper';
 import { JournalColors, Spacing } from '@/constants/theme';
+import { haptics } from '@/lib/haptics';
 import { useSession } from '@/lib/session/SessionProvider';
 import { searchExercises } from '@/lib/session/store';
+import { formatElapsed, restElapsedMs } from '@/lib/session/timer';
 import type { Exercise } from '@/lib/session/types';
 
 const WEIGHT_STEP = 2.5;
-/** Slider ceiling. Above this the ± buttons still work, so it is not a cap. */
+/** Slider ceiling. The ± buttons still go past it, so it is not a cap. */
 const WEIGHT_SLIDER_MAX = 200;
 const SECTION_LIMIT = 5;
+/** Reps planned for a fresh exercise, before any history says otherwise. */
+const DEFAULT_REP_TARGET = 3;
 /** How long the tick stays up before the sheet zooms out. */
 const SUCCESS_MS = 600;
 
@@ -42,9 +46,11 @@ interface Props {
   onModeChange: (mode: SheetMode) => void;
   /** Chosen an exercise from the picker — the parent ends any running rest. */
   onExerciseChosen: () => void;
+  /** The screen's single clock, so the relax timer starts no interval of its own. */
+  now: number;
 }
 
-export function ExerciseSheet({ mode, onModeChange, onExerciseChosen }: Props) {
+export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Props) {
   const { state, dispatch, store } = useSession();
   const sheetRef = useRef<BottomSheet>(null);
 
@@ -54,15 +60,38 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen }: Props) {
   const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
   const [customName, setCustomName] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [repTarget, setRepTarget] = useState(DEFAULT_REP_TARGET);
+  const [askFinish, setAskFinish] = useState(false);
 
   const selectedExerciseIdRef = useRef<string | null>(null);
   const successScale = useRef(new Animated.Value(0)).current;
+  const checkScale = useRef(new Animated.Value(0)).current;
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (mode === null) sheetRef.current?.close();
     else sheetRef.current?.expand();
   }, [mode]);
+
+  /**
+   * Every opening of the working sheet is a fresh set: no reps done yet, and
+   * a target seeded from the last time this exercise was performed in this
+   * session. Keyed on the mode rather than the exercise id so reopening the
+   * same exercise starts a new set instead of resuming the last one.
+   */
+  const setsRef = useRef(state.sets);
+  setsRef.current = state.sets;
+  const currentIdRef = useRef(state.currentExerciseId);
+  currentIdRef.current = state.currentExerciseId;
+  useEffect(() => {
+    if (mode !== 'active') return;
+    dispatch({ type: 'setReps', reps: 0 });
+    checkScale.setValue(0);
+    const previous = [...setsRef.current]
+      .reverse()
+      .find((set) => set.exerciseId === currentIdRef.current);
+    setRepTarget(previous?.reps ?? DEFAULT_REP_TARGET);
+  }, [mode, dispatch, checkScale]);
 
   useEffect(() => {
     if (mode !== 'picker') return;
@@ -111,12 +140,16 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen }: Props) {
 
     const open = (last: { reps: number; weight: number } | null) => {
       if (selectedExerciseIdRef.current !== exercise.id) return;
+      // `lastReps` is deliberately not passed: reps now counts what has been
+      // done in THIS set, and it starts at zero. History seeds the target,
+      // which the mode effect above reads.
       dispatch({
         type: 'selectExercise',
         exerciseId: exercise.id,
         exerciseName: exercise.name,
-        ...(last === null ? {} : { lastReps: last.reps, lastWeight: last.weight }),
+        ...(last === null ? {} : { lastWeight: last.weight }),
       });
+      if (last !== null) setRepTarget(last.reps);
       onModeChange('active');
     };
 
@@ -142,7 +175,33 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen }: Props) {
       });
   };
 
+  const onFinishRep = () => {
+    const done = state.reps + 1;
+    dispatch({ type: 'setReps', reps: done });
+    if (done < repTarget) {
+      haptics.tap();
+      return;
+    }
+    // The planned reps are done: a stronger confirmation, and a decision.
+    haptics.success();
+    checkScale.setValue(0);
+    Animated.timing(checkScale, {
+      toValue: 1,
+      duration: 240,
+      easing: Easing.out(Easing.back(2)),
+      useNativeDriver: true,
+    }).start();
+    setAskFinish(true);
+  };
+
+  const onAddOneRep = () => {
+    setAskFinish(false);
+    setRepTarget((target) => target + 1);
+    dispatch({ type: 'startRest', now: Date.now() });
+  };
+
   const onFinishSet = () => {
+    setAskFinish(false);
     dispatch({ type: 'completeSet', now: Date.now() });
     setShowSuccess(true);
     successScale.setValue(0);
@@ -180,7 +239,10 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen }: Props) {
       ? []
       : state.sets.filter((set) => set.exerciseId === state.currentExerciseId);
 
-  const canLogSet = state.currentExerciseId !== null && state.timer.status === 'running';
+  const repsDone = state.reps;
+  const repsComplete = repsDone >= repTarget;
+  const resting = state.restStartedAt !== null;
+  const canLog = state.currentExerciseId !== null && state.timer.status === 'running';
 
   const renderSection = (title: string, items: Exercise[]) =>
     items.length === 0 ? null : (
@@ -198,166 +260,225 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen }: Props) {
     );
 
   return (
-    <BottomSheet
-      ref={sheetRef}
-      index={-1}
-      snapPoints={SNAP_POINTS}
-      // v5 defaults this to true, which sizes the sheet to its content and
-      // ignores snapPoints. A non-measuring child then yields a zero-height
-      // sheet: it opens, and nothing is visible.
-      enableDynamicSizing={false}
-      animateOnMount={false}
-      enablePanDownToClose
-      onClose={handleSheetClose}
-      backdropComponent={renderBackdrop}
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
-      backgroundStyle={styles.sheetBackground}
-    >
-      {mode === 'picker' ? (
-        <BottomSheetScrollView contentContainerStyle={styles.body}>
-          <Text style={styles.title}>Next exercise</Text>
-          <BottomSheetTextInput
-            placeholder="Search"
-            placeholderTextColor={JournalColors.inkFaint}
-            value={query}
-            onChangeText={setQuery}
-            style={styles.input}
-          />
-          {renderSection('Favourites', favourites)}
-          {renderSection('Recent', recents)}
-          {renderSection('All', rest)}
-          <View style={styles.addRow}>
+    <>
+      <BottomSheet
+        ref={sheetRef}
+        index={-1}
+        snapPoints={SNAP_POINTS}
+        // v5 defaults this to true, which sizes the sheet to its content and
+        // ignores snapPoints. A non-measuring child then yields a zero-height
+        // sheet: it opens, and nothing is visible.
+        enableDynamicSizing={false}
+        animateOnMount={false}
+        enablePanDownToClose
+        onClose={handleSheetClose}
+        backdropComponent={renderBackdrop}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        backgroundStyle={styles.sheetBackground}
+      >
+        {mode === 'picker' ? (
+          <BottomSheetScrollView contentContainerStyle={styles.body}>
+            <Text style={styles.title}>Next exercise</Text>
             <BottomSheetTextInput
-              placeholder="Add custom exercise"
+              placeholder="Search"
               placeholderTextColor={JournalColors.inkFaint}
-              value={customName}
-              onChangeText={setCustomName}
-              style={[styles.input, styles.addInput]}
+              value={query}
+              onChangeText={setQuery}
+              style={styles.input}
             />
-            <Button mode="contained" onPress={addCustom} disabled={customName.trim() === ''}>
-              Add
-            </Button>
-          </View>
-        </BottomSheetScrollView>
-      ) : (
-        <BottomSheetView style={styles.body}>
-          <View style={styles.activeHeader}>
-            <View style={styles.activeTitleBlock}>
+            {renderSection('Favourites', favourites)}
+            {renderSection('Recent', recents)}
+            {renderSection('All', rest)}
+            <View style={styles.addRow}>
+              <BottomSheetTextInput
+                placeholder="Add custom exercise"
+                placeholderTextColor={JournalColors.inkFaint}
+                value={customName}
+                onChangeText={setCustomName}
+                style={[styles.input, styles.addInput]}
+              />
+              <Button mode="contained" onPress={addCustom} disabled={customName.trim() === ''}>
+                Add
+              </Button>
+            </View>
+          </BottomSheetScrollView>
+        ) : (
+          <BottomSheetView style={styles.body}>
+            <View style={styles.activeHeader}>
               <Text style={styles.title}>{state.currentExerciseName ?? 'No exercise'}</Text>
-              <Text style={styles.subtitle}>Set {setsForExercise.length + 1}</Text>
+              <Button mode="text" onPress={() => onModeChange('picker')}>
+                Change
+              </Button>
             </View>
-            <Button mode="text" onPress={() => onModeChange('picker')}>
-              Change
-            </Button>
-          </View>
 
-          {setsForExercise.length > 0 && (
-            <View style={styles.doneRow}>
-              {setsForExercise.map((set, index) => (
-                <View key={`${set.completedAt}-${index}`} style={styles.doneChip}>
-                  <Text style={styles.doneChipText}>
-                    {set.reps} × {set.weight}kg
-                  </Text>
+            {setsForExercise.length > 0 && (
+              <View style={styles.doneRow}>
+                {setsForExercise.map((set, index) => (
+                  <View key={`${set.completedAt}-${index}`} style={styles.doneChip}>
+                    <Text style={styles.doneChipText}>
+                      {set.reps} × {set.weight}kg
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View style={styles.field}>
+              <View style={styles.fieldHeader}>
+                <Text style={styles.fieldLabel}>Reps</Text>
+                <View style={styles.targetStepper}>
+                  <IconButton
+                    icon="minus"
+                    mode="outlined"
+                    size={14}
+                    onPress={() => setRepTarget((target) => Math.max(1, target - 1))}
+                  />
+                  <Text style={styles.targetValue}>{repTarget}</Text>
+                  <IconButton
+                    icon="plus"
+                    mode="outlined"
+                    size={14}
+                    onPress={() => setRepTarget((target) => target + 1)}
+                  />
                 </View>
-              ))}
+              </View>
+              <View style={styles.repRow}>
+                {Array.from({ length: repTarget }, (_, index) => {
+                  const done = index < repsDone;
+                  return (
+                    <View key={index} style={[styles.repDot, done && styles.repDotDone]}>
+                      <Text style={[styles.repDotText, done && styles.repDotTextDone]}>
+                        {index + 1}
+                      </Text>
+                    </View>
+                  );
+                })}
+                {repsComplete && (
+                  <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+                    <IconButton
+                      icon="check-circle"
+                      size={30}
+                      iconColor={JournalColors.selectedBorder}
+                      style={styles.repCheck}
+                    />
+                  </Animated.View>
+                )}
+              </View>
             </View>
-          )}
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Reps</Text>
-            <View style={styles.stepperRow}>
-              <IconButton
-                icon="minus"
-                mode="outlined"
-                size={26}
-                onPress={() => dispatch({ type: 'setReps', reps: state.reps - 1 })}
-              />
-              <Text style={styles.bigValue}>{state.reps}</Text>
-              <IconButton
-                icon="plus"
-                mode="outlined"
-                size={26}
-                onPress={() => dispatch({ type: 'setReps', reps: state.reps + 1 })}
-              />
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Weight</Text>
-            <View style={styles.stepperRow}>
-              <IconButton
-                icon="minus"
-                mode="outlined"
-                size={22}
-                onPress={() =>
-                  dispatch({ type: 'setWeight', weight: state.weight - WEIGHT_STEP })
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Weight</Text>
+              <View style={styles.stepperRow}>
+                <IconButton
+                  icon="minus"
+                  mode="outlined"
+                  size={22}
+                  onPress={() => dispatch({ type: 'setWeight', weight: state.weight - WEIGHT_STEP })}
+                />
+                <Text style={styles.bigValue}>{state.weight}</Text>
+                <Text style={styles.unit}>kg</Text>
+                <IconButton
+                  icon="plus"
+                  mode="outlined"
+                  size={22}
+                  onPress={() => dispatch({ type: 'setWeight', weight: state.weight + WEIGHT_STEP })}
+                />
+              </View>
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={WEIGHT_SLIDER_MAX}
+                step={WEIGHT_STEP}
+                value={Math.min(state.weight, WEIGHT_SLIDER_MAX)}
+                // Android's slider drifts off the step by a float epsilon,
+                // which reads as 12.500000000000002 in a 46px number.
+                onValueChange={(weight) =>
+                  dispatch({
+                    type: 'setWeight',
+                    weight: Math.round(weight / WEIGHT_STEP) * WEIGHT_STEP,
+                  })
                 }
-              />
-              <Text style={styles.bigValue}>{state.weight}</Text>
-              <Text style={styles.unit}>kg</Text>
-              <IconButton
-                icon="plus"
-                mode="outlined"
-                size={22}
-                onPress={() =>
-                  dispatch({ type: 'setWeight', weight: state.weight + WEIGHT_STEP })
-                }
+                minimumTrackTintColor={JournalColors.accent}
+                maximumTrackTintColor={JournalColors.gridLine}
+                thumbTintColor={JournalColors.accent}
               />
             </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={WEIGHT_SLIDER_MAX}
-              step={WEIGHT_STEP}
-              value={Math.min(state.weight, WEIGHT_SLIDER_MAX)}
-              // Android's slider drifts off the step by a float epsilon, which
-              // shows up as 12.500000000000002 in a 46px number.
-              onValueChange={(weight) =>
-                dispatch({ type: 'setWeight', weight: Math.round(weight / WEIGHT_STEP) * WEIGHT_STEP })
-              }
-              minimumTrackTintColor={JournalColors.accent}
-              maximumTrackTintColor={JournalColors.gridLine}
-              thumbTintColor={JournalColors.accent}
-            />
-          </View>
 
-          <View style={styles.spacer} />
+            {resting && state.restStartedAt !== null && (
+              <View style={styles.relaxRow}>
+                <Text style={styles.relaxLabel}>Relax</Text>
+                <Text style={styles.relaxValue}>
+                  {formatElapsed(restElapsedMs(state.timer, state.restStartedAt, now))}
+                </Text>
+                <Button mode="outlined" compact onPress={() => dispatch({ type: 'stopRest' })}>
+                  Stop
+                </Button>
+              </View>
+            )}
 
-          <Button
-            mode="contained"
-            disabled={!canLogSet || showSuccess}
-            onPress={onFinishSet}
-            style={styles.finishButton}
-            contentStyle={styles.finishButtonContent}
-          >
-            Finish set
-          </Button>
+            <View style={styles.spacer} />
 
-          {showSuccess && (
-            <View style={styles.successOverlay} pointerEvents="none">
-              <Animated.View style={[styles.successBadge, { transform: [{ scale: successScale }] }]}>
-                <IconButton icon="check" size={44} iconColor={JournalColors.white} />
-              </Animated.View>
-              <Text style={styles.successText}>
-                {state.reps} × {state.weight}kg logged
-              </Text>
-            </View>
-          )}
-        </BottomSheetView>
-      )}
-    </BottomSheet>
+            <Button
+              mode="contained"
+              disabled={!canLog || repsComplete || showSuccess}
+              onPress={onFinishRep}
+              style={styles.repButton}
+              contentStyle={styles.repButtonContent}
+            >
+              Finish rep
+            </Button>
+            <Button
+              mode="contained-tonal"
+              disabled={!canLog || repsDone === 0 || showSuccess}
+              onPress={onFinishSet}
+              contentStyle={styles.finishButtonContent}
+            >
+              Finish set
+            </Button>
+
+            {showSuccess && (
+              <View style={styles.successOverlay} pointerEvents="none">
+                <Animated.View
+                  style={[styles.successBadge, { transform: [{ scale: successScale }] }]}
+                >
+                  <IconButton icon="check" size={44} iconColor={JournalColors.white} />
+                </Animated.View>
+                <Text style={styles.successText}>
+                  {repsDone} × {state.weight}kg logged
+                </Text>
+              </View>
+            )}
+          </BottomSheetView>
+        )}
+      </BottomSheet>
+
+      <Portal>
+        <Dialog visible={askFinish} onDismiss={() => setAskFinish(false)}>
+          <Dialog.Title>
+            {repsDone} × {state.weight}kg
+          </Dialog.Title>
+          <Dialog.Content>
+            <Text>That is every rep you planned. Finish the set, or push one more?</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={onAddOneRep}>Add one rep</Button>
+            <Button mode="contained" onPress={onFinishSet}>
+              Finish set
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   sheetBackground: { backgroundColor: JournalColors.white },
   body: { flex: 1, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: Spacing.md },
-  title: { fontSize: 22, fontWeight: '800', color: JournalColors.inkBlack },
-  subtitle: { fontSize: 14, color: JournalColors.inkFaint, marginTop: 2 },
-  activeHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  activeTitleBlock: { flex: 1 },
+  title: { fontSize: 22, fontWeight: '800', color: JournalColors.inkBlack, flex: 1 },
+  activeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   doneRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   doneChip: {
     borderRadius: 999,
@@ -369,8 +490,41 @@ const styles = StyleSheet.create({
   },
   doneChipText: { fontSize: 14, fontWeight: '700', color: JournalColors.inkBrown },
   field: { gap: Spacing.xs },
+  fieldHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   fieldLabel: { fontSize: 14, fontWeight: '700', color: JournalColors.inkFaint },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
+  targetStepper: { flexDirection: 'row', alignItems: 'center' },
+  targetValue: {
+    minWidth: 26,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '800',
+    color: JournalColors.inkBrown,
+  },
+  repRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.sm },
+  repDot: {
+    minWidth: 38,
+    height: 38,
+    borderRadius: 19,
+    paddingHorizontal: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: JournalColors.gridLine,
+    backgroundColor: JournalColors.white,
+  },
+  repDotDone: {
+    backgroundColor: JournalColors.selected,
+    borderColor: JournalColors.selectedBorder,
+  },
+  repDotText: { fontSize: 16, fontWeight: '800', color: JournalColors.inkBlack },
+  repDotTextDone: { color: JournalColors.selectedBorder },
+  repCheck: { margin: 0 },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+  },
   bigValue: {
     minWidth: 90,
     textAlign: 'center',
@@ -382,6 +536,23 @@ const styles = StyleSheet.create({
   },
   unit: { fontSize: 18, fontWeight: '700', color: JournalColors.inkFaint, marginLeft: -Spacing.sm },
   slider: { width: '100%', height: 40 },
+  relaxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: 12,
+    backgroundColor: JournalColors.paperBg,
+  },
+  relaxLabel: { fontSize: 13, fontWeight: '800', letterSpacing: 1, color: JournalColors.accent },
+  relaxValue: {
+    flex: 1,
+    fontSize: 26,
+    fontWeight: '800',
+    color: JournalColors.inkBlack,
+    fontVariant: ['tabular-nums'],
+  },
   spacer: { flex: 1 },
   input: {
     borderWidth: 1,
@@ -395,8 +566,11 @@ const styles = StyleSheet.create({
   },
   addRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', marginTop: Spacing.sm },
   addInput: { flex: 1 },
-  finishButton: { marginTop: Spacing.sm },
-  finishButtonContent: { paddingVertical: Spacing.lg },
+  repButton: { marginTop: Spacing.sm },
+  repButtonContent: { paddingVertical: Spacing.lg },
+  // Half the working button's height: it ends the exercise, which happens once
+  // per exercise rather than once per rep.
+  finishButtonContent: { paddingVertical: Spacing.xs },
   successOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
