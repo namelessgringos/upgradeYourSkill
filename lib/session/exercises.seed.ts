@@ -1,0 +1,65 @@
+import type { Exercise } from './types';
+
+export const MUSCLE_GROUPS = [
+  'chest',
+  'back',
+  'shoulders',
+  'biceps',
+  'triceps',
+  'quads',
+  'hamstrings',
+  'glutes',
+  'calves',
+  'core',
+  'full-body',
+] as const;
+
+function seed(id: string, name: string, muscleGroups: string[]): Exercise {
+  return { id, name, muscleGroups, isCustom: false, ownerUid: null };
+}
+
+/** The global library. `ownerUid: null` marks these as readable by everyone. */
+export const SEED_EXERCISES: Exercise[] = [
+  seed('back-squat', 'Back Squat', ['quads', 'glutes']),
+  seed('front-squat', 'Front Squat', ['quads', 'core']),
+  seed('goblet-squat', 'Goblet Squat', ['quads', 'glutes']),
+  seed('deadlift', 'Deadlift', ['hamstrings', 'back', 'glutes']),
+  seed('romanian-deadlift', 'Romanian Deadlift', ['hamstrings', 'glutes']),
+  seed('hip-thrust', 'Hip Thrust', ['glutes']),
+  seed('leg-press', 'Leg Press', ['quads', 'glutes']),
+  seed('lunge', 'Lunge', ['quads', 'glutes']),
+  seed('bulgarian-split-squat', 'Bulgarian Split Squat', ['quads', 'glutes']),
+  seed('leg-curl', 'Leg Curl', ['hamstrings']),
+  seed('leg-extension', 'Leg Extension', ['quads']),
+  seed('calf-raise', 'Calf Raise', ['calves']),
+  seed('bench-press', 'Bench Press', ['chest', 'triceps']),
+  seed('incline-bench-press', 'Incline Bench Press', ['chest', 'shoulders']),
+  seed('dumbbell-press', 'Dumbbell Press', ['chest', 'triceps']),
+  seed('push-up', 'Push-Up', ['chest', 'triceps']),
+  seed('chest-fly', 'Chest Fly', ['chest']),
+  seed('dip', 'Dip', ['chest', 'triceps']),
+  seed('pull-up', 'Pull-Up', ['back', 'biceps']),
+  seed('chin-up', 'Chin-Up', ['back', 'biceps']),
+  seed('lat-pulldown', 'Lat Pulldown', ['back', 'biceps']),
+  seed('barbell-row', 'Barbell Row', ['back', 'biceps']),
+  seed('dumbbell-row', 'Dumbbell Row', ['back', 'biceps']),
+  seed('seated-cable-row', 'Seated Cable Row', ['back']),
+  seed('face-pull', 'Face Pull', ['shoulders', 'back']),
+  seed('overhead-press', 'Overhead Press', ['shoulders', 'triceps']),
+  seed('arnold-press', 'Arnold Press', ['shoulders']),
+  seed('lateral-raise', 'Lateral Raise', ['shoulders']),
+  seed('rear-delt-fly', 'Rear Delt Fly', ['shoulders']),
+  seed('barbell-curl', 'Barbell Curl', ['biceps']),
+  seed('dumbbell-curl', 'Dumbbell Curl', ['biceps']),
+  seed('hammer-curl', 'Hammer Curl', ['biceps']),
+  seed('triceps-pushdown', 'Triceps Pushdown', ['triceps']),
+  seed('skull-crusher', 'Skull Crusher', ['triceps']),
+  seed('plank', 'Plank', ['core']),
+  seed('hanging-leg-raise', 'Hanging Leg Raise', ['core']),
+  seed('russian-twist', 'Russian Twist', ['core']),
+  seed('cable-crunch', 'Cable Crunch', ['core']),
+  seed('farmers-carry', "Farmer's Carry", ['core', 'full-body']),
+  seed('kettlebell-swing', 'Kettlebell Swing', ['glutes', 'full-body']),
+  seed('burpee', 'Burpee', ['full-body']),
+  seed('mountain-climber', 'Mountain Climber', ['core', 'full-body']),
+];

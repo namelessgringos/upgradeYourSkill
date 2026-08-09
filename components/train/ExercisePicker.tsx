@@ -1,0 +1,153 @@
+import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Button, List, Modal, Portal, Text, TextInput } from 'react-native-paper';
+import { JournalColors, Spacing } from '@/constants/theme';
+import { searchExercises, type SessionStore } from '@/lib/session/store';
+import type { Exercise } from '@/lib/session/types';
+
+interface Props {
+  visible: boolean;
+  onDismiss: () => void;
+  onSelect: (exercise: Exercise) => void;
+  store: SessionStore;
+}
+
+const SECTION_LIMIT = 5;
+
+export function ExercisePicker({ visible, onDismiss, onSelect, store }: Props) {
+  const [query, setQuery] = useState('');
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+  const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
+  const [customName, setCustomName] = useState('');
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+
+    store
+      .listExercises()
+      .then((list) => {
+        if (!cancelled) setExercises(list);
+      })
+      .catch(() => {
+        if (!cancelled) setExercises([]);
+      });
+
+    store
+      .recentExercises(SECTION_LIMIT)
+      .then((list) => {
+        if (!cancelled) setRecentIds(list.map((exercise) => exercise.id));
+      })
+      .catch(() => {
+        if (!cancelled) setRecentIds([]);
+      });
+
+    store
+      .favouriteExercises(SECTION_LIMIT)
+      .then((list) => {
+        if (!cancelled) setFavouriteIds(list.map((exercise) => exercise.id));
+      })
+      .catch(() => {
+        if (!cancelled) setFavouriteIds([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, store]);
+
+  const filtered = searchExercises(exercises, query);
+  const byId = (id: string) => filtered.find((exercise) => exercise.id === id);
+  const favourites = favouriteIds.map(byId).filter((e): e is Exercise => e !== undefined);
+  const recents = recentIds
+    .map(byId)
+    .filter((e): e is Exercise => e !== undefined)
+    .filter((e) => !favouriteIds.includes(e.id));
+  const shownIds = new Set([...favourites, ...recents].map((e) => e.id));
+  const rest = filtered.filter((e) => !shownIds.has(e.id));
+
+  const select = (exercise: Exercise) => {
+    setQuery('');
+    onSelect(exercise);
+  };
+
+  const addCustom = () => {
+    const name = customName.trim();
+    if (name === '') return;
+    store
+      .addExercise(name, [])
+      .then((exercise) => {
+        setExercises((current) => [...current, exercise]);
+        setCustomName('');
+        select(exercise);
+      })
+      .catch(() => {
+        // Adding failed — leave the input as-is so the trainer can retry.
+      });
+  };
+
+  const renderSection = (title: string, items: Exercise[]) =>
+    items.length === 0 ? null : (
+      <List.Section key={title}>
+        <List.Subheader>{title}</List.Subheader>
+        {items.map((exercise) => (
+          <List.Item
+            key={exercise.id}
+            title={exercise.name}
+            description={exercise.muscleGroups.join(', ')}
+            onPress={() => select(exercise)}
+          />
+        ))}
+      </List.Section>
+    );
+
+  return (
+    <Portal>
+      <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.sheet}>
+        <Text variant="titleMedium" style={styles.title}>
+          Choose an exercise
+        </Text>
+        <TextInput
+          label="Search"
+          mode="outlined"
+          value={query}
+          onChangeText={setQuery}
+          style={styles.search}
+        />
+        <ScrollView style={styles.list}>
+          {renderSection('Favourites', favourites)}
+          {renderSection('Recent', recents)}
+          {renderSection('All', rest)}
+        </ScrollView>
+        <View style={styles.addRow}>
+          <TextInput
+            label="Add custom exercise"
+            mode="outlined"
+            value={customName}
+            onChangeText={setCustomName}
+            style={styles.addInput}
+          />
+          <Button mode="contained" onPress={addCustom} disabled={customName.trim() === ''}>
+            Add
+          </Button>
+        </View>
+      </Modal>
+    </Portal>
+  );
+}
+
+const styles = StyleSheet.create({
+  sheet: {
+    backgroundColor: JournalColors.white,
+    margin: Spacing.lg,
+    borderRadius: 12,
+    padding: Spacing.lg,
+    maxHeight: '80%',
+  },
+  title: { fontWeight: '800', marginBottom: Spacing.sm },
+  search: { marginBottom: Spacing.sm },
+  list: { maxHeight: 360 },
+  addRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', marginTop: Spacing.sm },
+  addInput: { flex: 1 },
+});

@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { Mascot } from '@/components/mascot/Mascot';
@@ -35,6 +36,15 @@ export default function TabsLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <TabIcon glyph="⚙️" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="train"
+        options={{
+          title: 'Train',
+          tabBarIcon: ({ color }) => (
+            <MaterialCommunityIcons name="dumbbell" size={20} color={color} />
+          ),
         }}
       />
       </Tabs>
