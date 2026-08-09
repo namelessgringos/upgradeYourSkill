@@ -75,6 +75,7 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
   const selectedExerciseIdRef = useRef<string | null>(null);
   const successScale = useRef(new Animated.Value(0)).current;
   const checkScale = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -268,6 +269,37 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
   const resting = state.restStartedAt !== null;
   const canLog = state.currentExerciseId !== null && state.timer.status === 'running';
 
+  /**
+   * The rep currently being performed: the next empty marker, but only while
+   * one is genuinely under way. Resting, paused or finished, nothing pulses —
+   * a marker that keeps breathing while the session is paused says the wrong
+   * thing.
+   */
+  const repSlotCount = Math.max(repTarget, repsDone);
+  const activeRepIndex =
+    mode === 'active' && canLog && !resting && repsDone < repSlotCount ? repsDone : -1;
+
+  useEffect(() => {
+    if (activeRepIndex === -1) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.timing(pulse, {
+        toValue: 1,
+        duration: 1400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [activeRepIndex, pulse]);
+
+  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] });
+  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] });
+
   const renderSection = (title: string, items: Exercise[]) =>
     items.length === 0 ? null : (
       <List.Section key={title}>
@@ -367,28 +399,46 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
                 </View>
               </View>
               <View style={styles.repRow}>
-                {Array.from({ length: Math.max(repTarget, repsDone) }, (_, index) => {
+                {Array.from({ length: repSlotCount }, (_, index) => {
                   const entry = state.repEntries[index];
                   const done = entry !== undefined;
+                  const active = index === activeRepIndex;
                   return (
                     <Pressable
                       key={index}
                       disabled={!done}
                       onPress={() => setEditingRep(index)}
-                      style={({ pressed }) => [
-                        styles.repDot,
-                        done && styles.repDotDone,
-                        pressed && styles.repDotPressed,
-                      ]}
+                      style={({ pressed }) => [styles.repSlot, pressed && styles.repDotPressed]}
                       accessibilityRole="button"
                       accessibilityLabel={
-                        done ? `Rep ${index + 1}, ${entry.weight}kg. Edit.` : `Rep ${index + 1}`
+                        done
+                          ? `Rep ${index + 1}, ${entry.weight}kg. Edit.`
+                          : active
+                            ? `Rep ${index + 1}, in progress`
+                            : `Rep ${index + 1}`
                       }
                     >
-                      <Text style={[styles.repDotText, done && styles.repDotTextDone]}>
-                        {index + 1}
-                      </Text>
-                      {done && <Text style={styles.repDotWeight}>{entry.weight}</Text>}
+                      {active && (
+                        <Animated.View
+                          pointerEvents="none"
+                          style={[
+                            styles.repHalo,
+                            { opacity: haloOpacity, transform: [{ scale: haloScale }] },
+                          ]}
+                        />
+                      )}
+                      <View
+                        style={[
+                          styles.repDot,
+                          done && styles.repDotDone,
+                          active && styles.repDotActive,
+                        ]}
+                      >
+                        <Text style={[styles.repDotText, done && styles.repDotTextDone]}>
+                          {index + 1}
+                        </Text>
+                        {done && <Text style={styles.repDotWeight}>{entry.weight}</Text>}
+                      </View>
                     </Pressable>
                   );
                 })}
@@ -597,6 +647,7 @@ const styles = StyleSheet.create({
     color: JournalColors.inkBrown,
   },
   repRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.sm },
+  repSlot: { alignItems: 'center', justifyContent: 'center' },
   repDot: {
     minWidth: 38,
     height: 38,
@@ -607,6 +658,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: JournalColors.gridLine,
     backgroundColor: JournalColors.white,
+  },
+  repDotActive: { borderWidth: 2, borderColor: JournalColors.accent },
+  /**
+   * The pulse rides behind the marker rather than resizing it, so the row
+   * never reflows while a rep is under way.
+   */
+  repHalo: {
+    position: 'absolute',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2,
+    borderColor: JournalColors.accent,
   },
   repDotDone: {
     backgroundColor: JournalColors.selected,
