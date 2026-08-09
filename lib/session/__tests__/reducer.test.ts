@@ -88,27 +88,33 @@ describe('exercise selection', () => {
     expect(state.currentExerciseName).toBe('Back Squat');
   });
 
-  it('applies remembered reps and weight when supplied', () => {
+  it('applies the remembered weight when supplied', () => {
     const state = sessionReducer(started(), {
       type: 'selectExercise',
       exerciseId: 'squat',
       exerciseName: 'Back Squat',
-      lastReps: 8,
       lastWeight: 60,
     });
-    expect(state.reps).toBe(8);
     expect(state.weight).toBe(60);
+  });
+
+  it('discards reps logged against the previous exercise', () => {
+    let state = sessionReducer(started(), {
+      type: 'selectExercise',
+      exerciseId: 'squat',
+      exerciseName: 'Back Squat',
+    });
+    state = sessionReducer(state, { type: 'logRep', weight: 60, durationMs: 4000 });
+    state = sessionReducer(state, {
+      type: 'selectExercise',
+      exerciseId: 'bench',
+      exerciseName: 'Bench Press',
+    });
+    expect(state.repEntries).toEqual([]);
   });
 });
 
-describe('reps and weight', () => {
-  it('adjusts reps but never below zero', () => {
-    let state = sessionReducer(started(), { type: 'setReps', reps: 3 });
-    expect(state.reps).toBe(3);
-    state = sessionReducer(state, { type: 'setReps', reps: -5 });
-    expect(state.reps).toBe(0);
-  });
-
+describe('weight', () => {
   it('adjusts weight but never below zero', () => {
     let state = sessionReducer(started(), { type: 'setWeight', weight: 42.5 });
     expect(state.weight).toBe(42.5);
@@ -118,27 +124,48 @@ describe('reps and weight', () => {
 });
 
 describe('completeSet', () => {
+  /** An exercise selected and one rep at 50kg already logged. */
   function readyToLog(): SessionState {
-    return sessionReducer(started(), {
+    const selected = sessionReducer(started(), {
       type: 'selectExercise',
       exerciseId: 'squat',
       exerciseName: 'Back Squat',
-      lastReps: 5,
       lastWeight: 50,
     });
+    return sessionReducer(selected, { type: 'logRep', weight: 50, durationMs: 3000 });
   }
 
-  it('appends a set with the current numbers', () => {
+  it('appends a set carrying every rep that was logged', () => {
     const state = sessionReducer(readyToLog(), { type: 'completeSet', now: T0 + 10_000 });
     expect(state.sets).toHaveLength(1);
     expect(state.sets[0]).toEqual({
       exerciseId: 'squat',
       exerciseName: 'Back Squat',
-      reps: 5,
-      weight: 50,
+      reps: [{ weight: 50, durationMs: 3000 }],
       restMs: null,
       completedAt: T0 + 10_000,
     });
+  });
+
+  it('keeps each rep at the weight it was actually lifted', () => {
+    let state = sessionReducer(readyToLog(), { type: 'logRep', weight: 55, durationMs: 3500 });
+    state = sessionReducer(state, { type: 'logRep', weight: 60, durationMs: 4000 });
+    state = sessionReducer(state, { type: 'completeSet', now: T0 + 20_000 });
+    expect(state.sets[0].reps.map((rep) => rep.weight)).toEqual([50, 55, 60]);
+  });
+
+  it('empties the working reps so the next set starts clean', () => {
+    const state = sessionReducer(readyToLog(), { type: 'completeSet', now: T0 + 10_000 });
+    expect(state.repEntries).toEqual([]);
+  });
+
+  it('is rejected with no reps logged — a blank row is worse than no row', () => {
+    const selected = sessionReducer(started(), {
+      type: 'selectExercise',
+      exerciseId: 'squat',
+      exerciseName: 'Back Squat',
+    });
+    expect(sessionReducer(selected, { type: 'completeSet', now: T0 + 1000 })).toBe(selected);
   });
 
   it('records the rest that preceded the set', () => {
@@ -168,6 +195,7 @@ describe('completeSet', () => {
 
   it('measures the second set rest from the first set, with no manual start', () => {
     let state = sessionReducer(readyToLog(), { type: 'completeSet', now: T0 + 10_000 });
+    state = sessionReducer(state, { type: 'logRep', weight: 50, durationMs: 3000 });
     state = sessionReducer(state, { type: 'completeSet', now: T0 + 70_000 });
     expect(state.sets[1].restMs).toBe(60_000);
   });
@@ -196,13 +224,15 @@ describe('completeSet', () => {
 });
 
 describe('stopRest', () => {
+  /** One rep logged, then a rest started at 10s. */
   function resting(): SessionState {
     const selected = sessionReducer(started(), {
       type: 'selectExercise',
       exerciseId: 'squat',
       exerciseName: 'Back Squat',
     });
-    return sessionReducer(selected, { type: 'startRest', now: T0 + 10_000 });
+    const logged = sessionReducer(selected, { type: 'logRep', weight: 40, durationMs: 3000 });
+    return sessionReducer(logged, { type: 'startRest', now: T0 + 10_000 });
   }
 
   it('clears a running rest clock', () => {
@@ -287,10 +317,84 @@ describe('summary edits', () => {
       exerciseId: 'squat',
       exerciseName: 'Back Squat',
     });
+    state = sessionReducer(state, { type: 'logRep', weight: 40, durationMs: 3000 });
     state = sessionReducer(state, { type: 'completeSet', now: T0 + 1000 });
+    state = sessionReducer(state, { type: 'logRep', weight: 40, durationMs: 3000 });
     state = sessionReducer(state, { type: 'completeSet', now: T0 + 2000 });
     state = sessionReducer(state, { type: 'removeSet', index: 0 });
     expect(state.sets).toHaveLength(1);
     expect(state.sets[0].completedAt).toBe(T0 + 2000);
+  });
+});
+
+describe('reps within a set', () => {
+  function selected(): SessionState {
+    return sessionReducer(started(), {
+      type: 'selectExercise',
+      exerciseId: 'squat',
+      exerciseName: 'Back Squat',
+    });
+  }
+
+  it('appends reps in the order performed', () => {
+    let state = sessionReducer(selected(), { type: 'logRep', weight: 40, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'logRep', weight: 42.5, durationMs: 3500 });
+    expect(state.repEntries).toEqual([
+      { weight: 40, durationMs: 3000 },
+      { weight: 42.5, durationMs: 3500 },
+    ]);
+  });
+
+  it('clamps a negative weight or duration rather than storing it', () => {
+    const state = sessionReducer(selected(), { type: 'logRep', weight: -5, durationMs: -1 });
+    expect(state.repEntries).toEqual([{ weight: 0, durationMs: 0 }]);
+  });
+
+  it('is rejected while paused — the clock is not running, so neither is the work', () => {
+    const paused = sessionReducer(selected(), { type: 'pause', now: T0 + 1000 });
+    expect(sessionReducer(paused, { type: 'logRep', weight: 40, durationMs: 3000 })).toBe(paused);
+  });
+
+  it('is rejected with no exercise selected', () => {
+    const state = started();
+    expect(sessionReducer(state, { type: 'logRep', weight: 40, durationMs: 3000 })).toBe(state);
+  });
+
+  it('edits one rep and leaves its neighbours alone', () => {
+    let state = sessionReducer(selected(), { type: 'logRep', weight: 40, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'logRep', weight: 40, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'setRepWeight', index: 0, weight: 45 });
+    expect(state.repEntries.map((rep) => rep.weight)).toEqual([45, 40]);
+  });
+
+  it('keeps an edited rep duration', () => {
+    let state = sessionReducer(selected(), { type: 'logRep', weight: 40, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'setRepWeight', index: 0, weight: 45 });
+    expect(state.repEntries[0].durationMs).toBe(3000);
+  });
+
+  it('never edits a rep to a negative weight', () => {
+    let state = sessionReducer(selected(), { type: 'logRep', weight: 40, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'setRepWeight', index: 0, weight: -10 });
+    expect(state.repEntries[0].weight).toBe(0);
+  });
+
+  it('ignores an edit or removal outside the range', () => {
+    const state = sessionReducer(selected(), { type: 'logRep', weight: 40, durationMs: 3000 });
+    expect(sessionReducer(state, { type: 'setRepWeight', index: 4, weight: 50 })).toBe(state);
+    expect(sessionReducer(state, { type: 'removeRep', index: -1 })).toBe(state);
+  });
+
+  it('removes a rep', () => {
+    let state = sessionReducer(selected(), { type: 'logRep', weight: 40, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'logRep', weight: 45, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'removeRep', index: 0 });
+    expect(state.repEntries.map((rep) => rep.weight)).toEqual([45]);
+  });
+
+  it('leaves a set unsaveable once its last rep is removed', () => {
+    let state = sessionReducer(selected(), { type: 'logRep', weight: 40, durationMs: 3000 });
+    state = sessionReducer(state, { type: 'removeRep', index: 0 });
+    expect(sessionReducer(state, { type: 'completeSet', now: T0 + 5000 })).toBe(state);
   });
 });

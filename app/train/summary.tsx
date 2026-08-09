@@ -5,6 +5,7 @@ import { Button, Chip, IconButton, Snackbar, Surface, Text, TextInput } from 're
 import { Header } from '@/components/ui/Header';
 import { Screen } from '@/components/ui/Screen';
 import { Spacing } from '@/constants/theme';
+import { formatSetReps } from '@/lib/session/selectors';
 import { useSession } from '@/lib/session/SessionProvider';
 import type { Client } from '@/lib/session/types';
 
@@ -62,7 +63,7 @@ export default function TrainSummary() {
                 <View style={styles.setInfo}>
                   <Text variant="bodyLarge">{set.exerciseName}</Text>
                   <Text variant="bodySmall" style={styles.setMeta}>
-                    {set.reps} reps · {set.weight} kg
+                    {formatSetReps(set)}
                   </Text>
                 </View>
                 <IconButton

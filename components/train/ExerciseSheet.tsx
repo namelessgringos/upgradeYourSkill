@@ -7,13 +7,14 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import Slider from '@react-native-community/slider';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Dialog, IconButton, List, Portal, Text } from 'react-native-paper';
 import { JournalColors, Spacing } from '@/constants/theme';
 import { haptics } from '@/lib/haptics';
+import { formatSetReps } from '@/lib/session/selectors';
 import { useSession } from '@/lib/session/SessionProvider';
 import { searchExercises } from '@/lib/session/store';
-import { formatElapsed, restElapsedMs } from '@/lib/session/timer';
+import { elapsedMs, formatElapsed, restElapsedMs } from '@/lib/session/timer';
 import type { Exercise } from '@/lib/session/types';
 
 const WEIGHT_STEP = 2.5;
@@ -62,6 +63,14 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
   const [showSuccess, setShowSuccess] = useState(false);
   const [repTarget, setRepTarget] = useState(DEFAULT_REP_TARGET);
   const [askFinish, setAskFinish] = useState(false);
+  /** Index of the logged rep being edited, or null. */
+  const [editingRep, setEditingRep] = useState<number | null>(null);
+  /**
+   * Session-elapsed ms at which the current rep began — the same offset
+   * timeline `restStartedAt` uses, so a pause mid-rep is excluded from the
+   * duration for free. Null while resting between reps.
+   */
+  const [repStartedAt, setRepStartedAt] = useState<number | null>(null);
 
   const selectedExerciseIdRef = useRef<string | null>(null);
   const successScale = useRef(new Animated.Value(0)).current;
@@ -83,15 +92,18 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
   setsRef.current = state.sets;
   const currentIdRef = useRef(state.currentExerciseId);
   currentIdRef.current = state.currentExerciseId;
+  const timerRef = useRef(state.timer);
+  timerRef.current = state.timer;
   useEffect(() => {
     if (mode !== 'active') return;
-    dispatch({ type: 'setReps', reps: 0 });
     checkScale.setValue(0);
     const previous = [...setsRef.current]
       .reverse()
       .find((set) => set.exerciseId === currentIdRef.current);
-    setRepTarget(previous?.reps ?? DEFAULT_REP_TARGET);
-  }, [mode, dispatch, checkScale]);
+    setRepTarget(previous?.reps.length ?? DEFAULT_REP_TARGET);
+    // The first rep is under way the moment the sheet is up.
+    setRepStartedAt(elapsedMs(timerRef.current, Date.now()));
+  }, [mode, checkScale]);
 
   useEffect(() => {
     if (mode !== 'picker') return;
@@ -140,9 +152,6 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
 
     const open = (last: { reps: number; weight: number } | null) => {
       if (selectedExerciseIdRef.current !== exercise.id) return;
-      // `lastReps` is deliberately not passed: reps now counts what has been
-      // done in THIS set, and it starts at zero. History seeds the target,
-      // which the mode effect above reads.
       dispatch({
         type: 'selectExercise',
         exerciseId: exercise.id,
@@ -176,8 +185,18 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
   };
 
   const onFinishRep = () => {
-    const done = state.reps + 1;
-    dispatch({ type: 'setReps', reps: done });
+    const now_ = Date.now();
+    const elapsed = elapsedMs(state.timer, now_);
+    dispatch({
+      type: 'logRep',
+      weight: state.weight,
+      durationMs: repStartedAt === null ? 0 : Math.max(0, elapsed - repStartedAt),
+    });
+    // The rep is over, so rest is running and no rep is under way.
+    setRepStartedAt(null);
+    dispatch({ type: 'startRest', now: now_ });
+
+    const done = state.repEntries.length + 1;
     if (done < repTarget) {
       haptics.tap();
       return;
@@ -197,7 +216,12 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
   const onAddOneRep = () => {
     setAskFinish(false);
     setRepTarget((target) => target + 1);
-    dispatch({ type: 'startRest', now: Date.now() });
+  };
+
+  /** Rest is over: the next rep starts counting from now. */
+  const onStopRelax = () => {
+    dispatch({ type: 'stopRest' });
+    setRepStartedAt(elapsedMs(state.timer, Date.now()));
   };
 
   const onFinishSet = () => {
@@ -239,7 +263,7 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
       ? []
       : state.sets.filter((set) => set.exerciseId === state.currentExerciseId);
 
-  const repsDone = state.reps;
+  const repsDone = state.repEntries.length;
   const repsComplete = repsDone >= repTarget;
   const resting = state.restStartedAt !== null;
   const canLog = state.currentExerciseId !== null && state.timer.status === 'running';
@@ -308,8 +332,8 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
           <BottomSheetView style={styles.body}>
             <View style={styles.activeHeader}>
               <Text style={styles.title}>{state.currentExerciseName ?? 'No exercise'}</Text>
-              <Button mode="text" onPress={() => onModeChange('picker')}>
-                Change
+              <Button mode="text" onPress={() => onModeChange(null)}>
+                Close
               </Button>
             </View>
 
@@ -317,9 +341,7 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
               <View style={styles.doneRow}>
                 {setsForExercise.map((set, index) => (
                   <View key={`${set.completedAt}-${index}`} style={styles.doneChip}>
-                    <Text style={styles.doneChipText}>
-                      {set.reps} × {set.weight}kg
-                    </Text>
+                    <Text style={styles.doneChipText}>{formatSetReps(set)}</Text>
                   </View>
                 ))}
               </View>
@@ -345,14 +367,29 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
                 </View>
               </View>
               <View style={styles.repRow}>
-                {Array.from({ length: repTarget }, (_, index) => {
-                  const done = index < repsDone;
+                {Array.from({ length: Math.max(repTarget, repsDone) }, (_, index) => {
+                  const entry = state.repEntries[index];
+                  const done = entry !== undefined;
                   return (
-                    <View key={index} style={[styles.repDot, done && styles.repDotDone]}>
+                    <Pressable
+                      key={index}
+                      disabled={!done}
+                      onPress={() => setEditingRep(index)}
+                      style={({ pressed }) => [
+                        styles.repDot,
+                        done && styles.repDotDone,
+                        pressed && styles.repDotPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        done ? `Rep ${index + 1}, ${entry.weight}kg. Edit.` : `Rep ${index + 1}`
+                      }
+                    >
                       <Text style={[styles.repDotText, done && styles.repDotTextDone]}>
                         {index + 1}
                       </Text>
-                    </View>
+                      {done && <Text style={styles.repDotWeight}>{entry.weight}</Text>}
+                    </Pressable>
                   );
                 })}
                 {repsComplete && (
@@ -406,15 +443,26 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
               />
             </View>
 
-            {resting && state.restStartedAt !== null && (
-              <View style={styles.relaxRow}>
-                <Text style={styles.relaxLabel}>Relax</Text>
-                <Text style={styles.relaxValue}>
+            {resting && state.restStartedAt !== null ? (
+              <View style={[styles.timerRow, styles.relaxRow]}>
+                <Text style={styles.relaxLabel}>RELAX</Text>
+                <Text style={styles.timerValue}>
                   {formatElapsed(restElapsedMs(state.timer, state.restStartedAt, now))}
                 </Text>
-                <Button mode="outlined" compact onPress={() => dispatch({ type: 'stopRest' })}>
+                <Button mode="contained" compact onPress={onStopRelax}>
                   Stop
                 </Button>
+              </View>
+            ) : (
+              <View style={styles.timerRow}>
+                <Text style={styles.repTimerLabel}>REP {repsDone + 1}</Text>
+                <Text style={styles.timerValue}>
+                  {formatElapsed(
+                    repStartedAt === null
+                      ? 0
+                      : restElapsedMs(state.timer, repStartedAt, now),
+                  )}
+                </Text>
               </View>
             )}
 
@@ -445,9 +493,7 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
                 >
                   <IconButton icon="check" size={44} iconColor={JournalColors.white} />
                 </Animated.View>
-                <Text style={styles.successText}>
-                  {repsDone} × {state.weight}kg logged
-                </Text>
+                <Text style={styles.successText}>{repsDone} reps logged</Text>
               </View>
             )}
           </BottomSheetView>
@@ -456,9 +502,7 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
 
       <Portal>
         <Dialog visible={askFinish} onDismiss={() => setAskFinish(false)}>
-          <Dialog.Title>
-            {repsDone} × {state.weight}kg
-          </Dialog.Title>
+          <Dialog.Title>{repsDone} reps done</Dialog.Title>
           <Dialog.Content>
             <Text>That is every rep you planned. Finish the set, or push one more?</Text>
           </Dialog.Content>
@@ -466,6 +510,58 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
             <Button onPress={onAddOneRep}>Add one rep</Button>
             <Button mode="contained" onPress={onFinishSet}>
               Finish set
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={editingRep !== null} onDismiss={() => setEditingRep(null)}>
+          <Dialog.Title>Rep {(editingRep ?? 0) + 1}</Dialog.Title>
+          <Dialog.Content>
+            <View style={styles.stepperRow}>
+              <IconButton
+                icon="minus"
+                mode="outlined"
+                size={20}
+                onPress={() =>
+                  editingRep !== null &&
+                  dispatch({
+                    type: 'setRepWeight',
+                    index: editingRep,
+                    weight: (state.repEntries[editingRep]?.weight ?? 0) - WEIGHT_STEP,
+                  })
+                }
+              />
+              <Text style={styles.editWeight}>
+                {editingRep === null ? 0 : (state.repEntries[editingRep]?.weight ?? 0)}
+              </Text>
+              <Text style={styles.unit}>kg</Text>
+              <IconButton
+                icon="plus"
+                mode="outlined"
+                size={20}
+                onPress={() =>
+                  editingRep !== null &&
+                  dispatch({
+                    type: 'setRepWeight',
+                    index: editingRep,
+                    weight: (state.repEntries[editingRep]?.weight ?? 0) + WEIGHT_STEP,
+                  })
+                }
+              />
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              textColor={JournalColors.accent}
+              onPress={() => {
+                if (editingRep !== null) dispatch({ type: 'removeRep', index: editingRep });
+                setEditingRep(null);
+              }}
+            >
+              Delete rep
+            </Button>
+            <Button mode="contained" onPress={() => setEditingRep(null)}>
+              Done
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -516,9 +612,19 @@ const styles = StyleSheet.create({
     backgroundColor: JournalColors.selected,
     borderColor: JournalColors.selectedBorder,
   },
-  repDotText: { fontSize: 16, fontWeight: '800', color: JournalColors.inkBlack },
+  repDotPressed: { opacity: 0.6 },
+  repDotText: { fontSize: 15, fontWeight: '800', color: JournalColors.inkBlack },
   repDotTextDone: { color: JournalColors.selectedBorder },
+  repDotWeight: { fontSize: 10, fontWeight: '700', color: JournalColors.selectedBorder },
   repCheck: { margin: 0 },
+  editWeight: {
+    minWidth: 80,
+    textAlign: 'center',
+    fontSize: 34,
+    fontWeight: '800',
+    color: JournalColors.inkBlack,
+    fontVariant: ['tabular-nums'],
+  },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -536,7 +642,7 @@ const styles = StyleSheet.create({
   },
   unit: { fontSize: 18, fontWeight: '700', color: JournalColors.inkFaint, marginLeft: -Spacing.sm },
   slider: { width: '100%', height: 40 },
-  relaxRow: {
+  timerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
@@ -545,8 +651,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: JournalColors.paperBg,
   },
+  relaxRow: { backgroundColor: JournalColors.selected },
   relaxLabel: { fontSize: 13, fontWeight: '800', letterSpacing: 1, color: JournalColors.accent },
-  relaxValue: {
+  repTimerLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: JournalColors.inkFaint,
+  },
+  timerValue: {
     flex: 1,
     fontSize: 26,
     fontWeight: '800',

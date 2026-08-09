@@ -220,18 +220,19 @@ export default function SessionSetup() {
         </Text>
         <View style={styles.chipRow}>
           {MUSCLE_GROUPS.map((group) => {
-            // Groups not being trained today are dimmed but still tappable.
-            // Genuinely disabling them would be wrong: a shoulder can be tired
-            // from yesterday and still worth recording, and noticing that is
-            // often what changes what gets trained.
+            // A group picked for today's session is dimmed here — you already
+            // said you are training it, so it is not the interesting answer to
+            // "what is already tired". Dimmed, never disabled: something you
+            // planned to train can also have arrived tired, and that is
+            // exactly the thing worth recording.
             const training = muscleGroups.includes(group);
             return (
               <Chip
                 key={group}
                 selected={fatiguedGroups.includes(group)}
                 onPress={() => toggleGroup(fatiguedGroups, setFatiguedGroups, group)}
-                style={[styles.chip, !training && styles.chipDimmed]}
-                textStyle={training ? undefined : styles.chipDimmedText}
+                style={[styles.chip, training && styles.chipDimmed]}
+                textStyle={training ? styles.chipDimmedText : undefined}
               >
                 {group}
               </Chip>

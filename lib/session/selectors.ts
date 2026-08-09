@@ -1,4 +1,4 @@
-import type { CompletedSet } from './types';
+import type { CompletedSet, RepEntry } from './types';
 
 /** One exercise as it appears in the live session log, with its sets in order. */
 export interface ExerciseGroup {
@@ -42,7 +42,33 @@ export function groupSetsByExercise(sets: CompletedSet[]): ExerciseGroup[] {
   return groups;
 }
 
-/** "10 × 60kg · 10 × 60kg · 8 × 62.5kg" — the group's sets on one line. */
+/** Trailing zeros make a weight column noisy: 42.5 stays, 40.0 becomes 40. */
+function formatWeight(weight: number): string {
+  return Number.isInteger(weight) ? String(weight) : String(Number(weight.toFixed(2)));
+}
+
+/**
+ * "4 × 42.5kg" when every rep was at the same weight, "40/42.5/42.5/45kg"
+ * when it was a ramp.
+ *
+ * The two forms exist because collapsing a ramp to one number is a lie, and
+ * spelling out four identical numbers is noise.
+ */
+export function formatSetReps(set: CompletedSet): string {
+  if (set.reps.length === 0) return '—';
+  const weights = set.reps.map((rep) => rep.weight);
+  const uniform = weights.every((weight) => weight === weights[0]);
+  return uniform
+    ? `${set.reps.length} × ${formatWeight(weights[0])}kg`
+    : `${weights.map(formatWeight).join('/')}kg`;
+}
+
+/** Every set of a group on one line, sets separated by a middle dot. */
 export function formatGroupSets(group: ExerciseGroup): string {
-  return group.sets.map((set) => `${set.reps} × ${set.weight}kg`).join(' · ');
+  return group.sets.map(formatSetReps).join(' · ');
+}
+
+/** The heaviest rep in a set — what "how much did they lift" usually means. */
+export function topWeight(reps: RepEntry[]): number {
+  return reps.reduce((max, rep) => Math.max(max, rep.weight), 0);
 }

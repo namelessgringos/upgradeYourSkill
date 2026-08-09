@@ -10,10 +10,11 @@ export type SessionAction =
       type: 'selectExercise';
       exerciseId: string;
       exerciseName: string;
-      lastReps?: number;
       lastWeight?: number;
     }
-  | { type: 'setReps'; reps: number }
+  | { type: 'logRep'; weight: number; durationMs: number }
+  | { type: 'setRepWeight'; index: number; weight: number }
+  | { type: 'removeRep'; index: number }
   | { type: 'setWeight'; weight: number }
   | { type: 'startRest'; now: number }
   | { type: 'stopRest' }
@@ -43,7 +44,7 @@ export function initialSession(
     fatiguedGroups: options.fatiguedGroups ?? [],
     currentExerciseId: null,
     currentExerciseName: null,
-    reps: 0,
+    repEntries: [],
     weight: 0,
     sets: [],
     intervals: options.intervals ?? null,
@@ -117,13 +118,40 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         ...state,
         currentExerciseId: action.exerciseId,
         currentExerciseName: action.exerciseName,
-        reps: action.lastReps ?? state.reps,
+        // Choosing an exercise starts a new set, so any reps logged against
+        // the previous one and never banked are discarded rather than
+        // silently attributed to the wrong exercise.
+        repEntries: [],
         weight: action.lastWeight ?? state.weight,
       };
     }
 
-    case 'setReps':
-      return { ...state, reps: Math.max(0, action.reps) };
+    case 'logRep': {
+      if (state.timer.status !== 'running') return state;
+      if (state.currentExerciseId === null) return state;
+      return {
+        ...state,
+        repEntries: [
+          ...state.repEntries,
+          { weight: Math.max(0, action.weight), durationMs: Math.max(0, action.durationMs) },
+        ],
+      };
+    }
+
+    case 'setRepWeight': {
+      if (action.index < 0 || action.index >= state.repEntries.length) return state;
+      return {
+        ...state,
+        repEntries: state.repEntries.map((entry, i) =>
+          i === action.index ? { ...entry, weight: Math.max(0, action.weight) } : entry,
+        ),
+      };
+    }
+
+    case 'removeRep': {
+      if (action.index < 0 || action.index >= state.repEntries.length) return state;
+      return { ...state, repEntries: state.repEntries.filter((_, i) => i !== action.index) };
+    }
 
     case 'setWeight':
       return { ...state, weight: Math.max(0, action.weight) };
@@ -142,8 +170,13 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
     case 'completeSet': {
       if (state.timer.status !== 'running') return state;
       if (state.currentExerciseId === null || state.currentExerciseName === null) return state;
+      // A set with no reps in it is not a set. Banking one would put a blank
+      // row in a training history, which is worse than no row.
+      if (state.repEntries.length === 0) return state;
       return {
         ...state,
+        // The next set starts empty.
+        repEntries: [],
         // Rest begins the instant a set ends. Nobody reaches for a second
         // button with a barbell still in their hands, and the rest that
         // matters is the one *between* sets — which is exactly this one.
@@ -153,8 +186,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
           {
             exerciseId: state.currentExerciseId,
             exerciseName: state.currentExerciseName,
-            reps: state.reps,
-            weight: state.weight,
+            reps: state.repEntries,
             restMs:
               state.restStartedAt === null
                 ? null

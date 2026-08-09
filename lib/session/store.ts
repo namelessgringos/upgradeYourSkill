@@ -1,9 +1,12 @@
 import { SEED_EXERCISES } from './exercises.seed';
+import { topWeight } from './selectors';
 import { elapsedMs } from './timer';
-import type { Client, Exercise, SavedSession, SessionState } from './types';
+import type { Client, CompletedSet, Exercise, SavedSession, SessionState } from './types';
 
 export interface LastPerformance {
+  /** How many reps were done, so the sheet can seed its rep target. */
   reps: number;
+  /** The heaviest rep of that set — the number worth starting from again. */
   weight: number;
 }
 
@@ -94,11 +97,20 @@ export function toSavedSession(
     durationMs: elapsedMs(state.timer, endedAt),
     muscleGroups: [...state.muscleGroups],
     fatiguedGroups: [...state.fatiguedGroups],
-    sets: state.sets.map((set) => ({ ...set })),
+    sets: state.sets.map(cloneSet),
     intervals: state.intervals === null ? null : { ...state.intervals },
     difficulty: state.difficulty,
     notes: state.notes,
   };
+}
+
+/**
+ * A set now carries an array of reps, so a shallow `{ ...set }` would hand
+ * out the store's own rep array. Mutating a returned set's reps would then
+ * rewrite stored training history.
+ */
+function cloneSet(set: CompletedSet): CompletedSet {
+  return { ...set, reps: set.reps.map((rep) => ({ ...rep })) };
 }
 
 /** Copy every mutable field, so a caller can never reach the store's own record. */
@@ -107,7 +119,7 @@ function cloneSavedSession(session: SavedSession): SavedSession {
     ...session,
     muscleGroups: [...session.muscleGroups],
     fatiguedGroups: [...session.fatiguedGroups],
-    sets: session.sets.map((set) => ({ ...set })),
+    sets: session.sets.map(cloneSet),
     intervals: session.intervals === null ? null : { ...session.intervals },
   };
 }
@@ -178,7 +190,7 @@ export class InMemorySessionStore implements SessionStore {
       for (let i = session.sets.length - 1; i >= 0; i -= 1) {
         const set = session.sets[i];
         if (set.exerciseId === exerciseId) {
-          return { reps: set.reps, weight: set.weight };
+          return { reps: set.reps.length, weight: topWeight(set.reps) };
         }
       }
     }

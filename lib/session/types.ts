@@ -37,6 +37,20 @@ export interface IntervalState {
   remainingMs: number;
 }
 
+/**
+ * One repetition, with the weight it was actually lifted at.
+ *
+ * Weight lives per rep rather than per set because a working set is often a
+ * ramp — 40, 42.5, 42.5, 45 — and a single number per set either loses that
+ * or lies about it.
+ */
+export interface RepEntry {
+  /** Kilograms. Zero for bodyweight work. */
+  weight: number;
+  /** How long this rep took, in session-elapsed ms (paused time excluded). */
+  durationMs: number;
+}
+
 export interface CompletedSet {
   exerciseId: string;
   /**
@@ -44,9 +58,8 @@ export interface CompletedSet {
    * a training history that decays into blank rows is worthless.
    */
   exerciseName: string;
-  reps: number;
-  /** Kilograms. Zero for bodyweight work. */
-  weight: number;
+  /** One entry per repetition, in the order performed. Never empty. */
+  reps: RepEntry[];
   /** Ms of rest taken before this set. Null when it was not timed. */
   restMs: number | null;
   completedAt: number;
@@ -70,7 +83,9 @@ export interface SessionState {
   fatiguedGroups: string[];
   currentExerciseId: string | null;
   currentExerciseName: string | null;
-  reps: number;
+  /** Reps logged so far in the set being worked. Emptied when the set is banked. */
+  repEntries: RepEntry[];
+  /** The weight the NEXT rep will be logged at. Kilograms. */
   weight: number;
   sets: CompletedSet[];
   /** Null for gym sessions. */

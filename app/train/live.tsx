@@ -10,6 +10,7 @@ import { RestStopwatch } from '@/components/train/RestStopwatch';
 import { SessionHeader } from '@/components/train/SessionHeader';
 import { SessionLog } from '@/components/train/SessionLog';
 import { JournalColors, Spacing } from '@/constants/theme';
+import { topWeight } from '@/lib/session/selectors';
 import { useSession } from '@/lib/session/SessionProvider';
 import { useSessionClock } from '@/lib/session/useSessionClock';
 
@@ -75,7 +76,7 @@ export default function TrainLive() {
       type: 'selectExercise',
       exerciseId,
       exerciseName,
-      ...(previous === undefined ? {} : { lastWeight: previous.weight }),
+      ...(previous === undefined ? {} : { lastWeight: topWeight(previous.reps) }),
     });
     setSheetMode('active');
   };

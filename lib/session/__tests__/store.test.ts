@@ -91,13 +91,16 @@ describe('InMemorySessionStore', () => {
       exerciseId: 'back-squat',
       exerciseName: 'Back Squat',
     });
-    s = sessionReducer(s, { type: 'setReps', reps: 5 });
-    s = sessionReducer(s, { type: 'setWeight', weight: 80 });
+    s = sessionReducer(s, { type: 'logRep', weight: 80, durationMs: 3000 });
+    s = sessionReducer(s, { type: 'logRep', weight: 80, durationMs: 3000 });
+    s = sessionReducer(s, { type: 'logRep', weight: 85, durationMs: 3000 });
     s = sessionReducer(s, { type: 'completeSet', now: T0 + 1000 });
     s = sessionReducer(s, { type: 'finish', now: T0 + 2000 });
     await store.saveSession(s);
 
-    expect(await store.lastPerformance('back-squat')).toEqual({ reps: 5, weight: 80 });
+    // Three reps, heaviest 85 — the count seeds the rep target and the top
+    // weight is the number worth starting from again.
+    expect(await store.lastPerformance('back-squat')).toEqual({ reps: 3, weight: 85 });
   });
 
   it('returns null when an exercise has never been done', async () => {
@@ -113,6 +116,8 @@ describe('InMemorySessionStore', () => {
           exerciseId,
           exerciseName: exerciseId,
         });
+        // A set needs at least one rep in it to be bankable.
+        s = sessionReducer(s, { type: 'logRep', weight: 40, durationMs: 3000 });
         s = sessionReducer(s, { type: 'completeSet', now: start + i + 1 });
       });
       return sessionReducer(s, { type: 'finish', now: start + exerciseIds.length + 10 });
@@ -164,6 +169,8 @@ describe('InMemorySessionStore', () => {
           exerciseId,
           exerciseName: exerciseId,
         });
+        // A set needs at least one rep in it to be bankable.
+        s = sessionReducer(s, { type: 'logRep', weight: 40, durationMs: 3000 });
         s = sessionReducer(s, { type: 'completeSet', now: start + i + 1 });
       });
       return sessionReducer(s, { type: 'finish', now: start + exerciseIds.length + 10 });
@@ -201,8 +208,11 @@ describe('InMemorySessionStore', () => {
       exerciseId: 'back-squat',
       exerciseName: 'Back Squat',
     });
-    s = sessionReducer(s, { type: 'setReps', reps: 5 });
-    s = sessionReducer(s, { type: 'setWeight', weight: 80 });
+    s = sessionReducer(s, { type: 'logRep', weight: 80, durationMs: 3000 });
+    s = sessionReducer(s, { type: 'logRep', weight: 80, durationMs: 3000 });
+    s = sessionReducer(s, { type: 'logRep', weight: 80, durationMs: 3000 });
+    s = sessionReducer(s, { type: 'logRep', weight: 80, durationMs: 3000 });
+    s = sessionReducer(s, { type: 'logRep', weight: 80, durationMs: 3000 });
     s = sessionReducer(s, { type: 'completeSet', now: start + 1000 });
     return sessionReducer(s, { type: 'finish', now: start + 2000 });
   };
@@ -249,12 +259,14 @@ describe('InMemorySessionStore', () => {
     saved.sets.push({
       exerciseId: 'deadlift',
       exerciseName: 'Deadlift',
-      reps: 999,
-      weight: 999,
+      reps: [{ weight: 999, durationMs: 999 }],
       restMs: null,
       completedAt: T0,
     });
-    saved.sets[0].reps = 999;
+    saved.sets[0].reps = [{ weight: 999, durationMs: 999 }];
+    // The rep array itself is the newer hazard: a shallow set copy would hand
+    // out the store's own array, and this push would rewrite stored history.
+    saved.sets[0].reps.push({ weight: 999, durationMs: 999 });
     saved.muscleGroups.push('fake');
     saved.fatiguedGroups.push('fake');
 
@@ -267,6 +279,18 @@ describe('InMemorySessionStore', () => {
     expect(stored.fatiguedGroups).toEqual(['back']);
   });
 
+  it('mutating a rep inside a set returned by listSessions does not rewrite history', async () => {
+    await store.saveSession(finishedSquatSession(T0));
+
+    const before = (await store.listSessions())[0];
+    before.sets[0].reps[0].weight = 999;
+    before.sets[0].reps.push({ weight: 999, durationMs: 999 });
+
+    const after = (await store.listSessions())[0];
+    expect(after.sets[0].reps).toHaveLength(5);
+    expect(after.sets[0].reps.every((rep) => rep.weight === 80)).toBe(true);
+  });
+
   it('defect 4: mutating a session returned by listSessions does not affect the store', async () => {
     await store.saveSession(finishedSquatSession(T0));
 
@@ -274,8 +298,7 @@ describe('InMemorySessionStore', () => {
     before.sets.push({
       exerciseId: 'deadlift',
       exerciseName: 'Deadlift',
-      reps: 999,
-      weight: 999,
+      reps: [{ weight: 999, durationMs: 999 }],
       restMs: null,
       completedAt: T0,
     });
