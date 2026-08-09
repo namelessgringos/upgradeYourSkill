@@ -1,10 +1,18 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Button, Chip, SegmentedButtons, Surface, Text, TextInput } from 'react-native-paper';
+import { Pressable, StyleSheet, View } from 'react-native';
+import {
+  Button,
+  Chip,
+  IconButton,
+  SegmentedButtons,
+  Surface,
+  Text,
+  TextInput,
+} from 'react-native-paper';
 import { Header } from '@/components/ui/Header';
 import { Screen } from '@/components/ui/Screen';
-import { Spacing } from '@/constants/theme';
+import { JournalColors, Spacing } from '@/constants/theme';
 import { BOXING_PRESET, HIIT_PRESET } from '@/lib/session/intervals';
 import { MUSCLE_GROUPS } from '@/lib/session/exercises.seed';
 import { useSession } from '@/lib/session/SessionProvider';
@@ -37,6 +45,9 @@ export default function SessionSetup() {
   const [fatiguedGroups, setFatiguedGroups] = useState<string[]>([]);
   const [intervals, setIntervals] = useState<IntervalConfig | null>(presetFor('gym'));
   const [newClientName, setNewClientName] = useState('');
+  // Collapsed by default: an anonymous session is the common case, and the
+  // card only earns its space once someone is actually picking a client.
+  const [clientOpen, setClientOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +101,10 @@ export default function SessionSetup() {
     router.replace('/train/live');
   };
 
+  /** A session with nobody attached is anonymous, not incomplete. */
+  const clientName =
+    clients.find((client) => client.id === clientId)?.name ?? 'Anonymous';
+
   const onAddClient = () => {
     const name = newClientName.trim();
     if (name === '') return;
@@ -112,42 +127,73 @@ export default function SessionSetup() {
       <SegmentedButtons value={style} onValueChange={onStyleChange} buttons={STYLE_OPTIONS} />
 
       <Surface style={styles.card} elevation={1}>
-        <Text variant="titleSmall" style={styles.cardTitle}>
-          Client
-        </Text>
-        <Button
-          mode={clientId === null ? 'contained' : 'outlined'}
-          onPress={() => setClientId(null)}
-          style={styles.skipButton}
+        <Pressable
+          onPress={() => setClientOpen((open) => !open)}
+          style={styles.clientHeader}
+          accessibilityRole="button"
+          accessibilityLabel={`Client: ${clientName}. ${clientOpen ? 'Collapse' : 'Expand'}.`}
         >
-          Skip — start without a client
-        </Button>
-        {clients.length > 0 && (
-          <View style={styles.chipRow}>
-            {clients.map((client) => (
-              <Chip
-                key={client.id}
-                selected={clientId === client.id}
-                onPress={() => setClientId(client.id)}
-                style={styles.chip}
-              >
-                {client.name}
-              </Chip>
-            ))}
-          </View>
-        )}
-        <View style={styles.addClientRow}>
-          <TextInput
-            label="Add client"
-            mode="outlined"
-            value={newClientName}
-            onChangeText={setNewClientName}
-            style={styles.addClientInput}
+          <Text variant="titleSmall" style={styles.cardTitle}>
+            Client: <Text style={styles.clientName}>{clientName}</Text>
+          </Text>
+          <IconButton
+            icon={clientOpen ? 'chevron-up' : 'chevron-down'}
+            size={22}
+            onPress={() => setClientOpen((open) => !open)}
+            style={styles.chevron}
           />
-          <Button mode="contained" onPress={onAddClient} disabled={newClientName.trim() === ''}>
-            Add
-          </Button>
-        </View>
+        </Pressable>
+
+        {clientOpen && (
+          <>
+            {clients.length > 0 && (
+              <View style={styles.chipRow}>
+                {clients.map((client) => (
+                  <Chip
+                    key={client.id}
+                    selected={clientId === client.id}
+                    onPress={() => {
+                      setClientId(client.id);
+                      setClientOpen(false);
+                    }}
+                    style={styles.chip}
+                  >
+                    {client.name}
+                  </Chip>
+                ))}
+              </View>
+            )}
+            <View style={styles.addClientRow}>
+              <TextInput
+                placeholder="Anonymous client"
+                mode="outlined"
+                dense
+                value={newClientName}
+                onChangeText={setNewClientName}
+                style={styles.addClientInput}
+              />
+              <IconButton
+                icon="plus"
+                mode="contained"
+                size={22}
+                onPress={onAddClient}
+                disabled={newClientName.trim() === ''}
+                accessibilityLabel="Add client"
+              />
+            </View>
+            {clientId !== null && (
+              <Button
+                mode="text"
+                compact
+                textColor={JournalColors.inkFaint}
+                onPress={() => setClientId(null)}
+                style={styles.skipButton}
+              >
+                Skip — no client
+              </Button>
+            )}
+          </>
+        )}
       </Surface>
 
       <Surface style={styles.card} elevation={1}>
@@ -173,16 +219,24 @@ export default function SessionSetup() {
           Already tired
         </Text>
         <View style={styles.chipRow}>
-          {MUSCLE_GROUPS.map((group) => (
-            <Chip
-              key={group}
-              selected={fatiguedGroups.includes(group)}
-              onPress={() => toggleGroup(fatiguedGroups, setFatiguedGroups, group)}
-              style={styles.chip}
-            >
-              {group}
-            </Chip>
-          ))}
+          {MUSCLE_GROUPS.map((group) => {
+            // Groups not being trained today are dimmed but still tappable.
+            // Genuinely disabling them would be wrong: a shoulder can be tired
+            // from yesterday and still worth recording, and noticing that is
+            // often what changes what gets trained.
+            const training = muscleGroups.includes(group);
+            return (
+              <Chip
+                key={group}
+                selected={fatiguedGroups.includes(group)}
+                onPress={() => toggleGroup(fatiguedGroups, setFatiguedGroups, group)}
+                style={[styles.chip, !training && styles.chipDimmed]}
+                textStyle={training ? undefined : styles.chipDimmedText}
+              >
+                {group}
+              </Chip>
+            );
+          })}
         </View>
       </Surface>
 
@@ -231,9 +285,14 @@ const styles = StyleSheet.create({
   container: { paddingTop: Spacing.lg, gap: Spacing.md, paddingBottom: 120 },
   card: { borderRadius: 12, padding: Spacing.lg, gap: Spacing.sm },
   cardTitle: { fontWeight: '800', opacity: 0.7 },
-  skipButton: { alignSelf: 'stretch' },
+  clientHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  clientName: { fontWeight: '800', opacity: 1, color: JournalColors.inkBlack },
+  chevron: { margin: 0 },
+  skipButton: { alignSelf: 'flex-start' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { marginBottom: 4 },
+  chipDimmed: { opacity: 0.45, backgroundColor: JournalColors.paperBg },
+  chipDimmedText: { color: JournalColors.inkFaint },
   addClientRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
   addClientInput: { flex: 1 },
   intervalRow: { flexDirection: 'row', gap: Spacing.sm },
