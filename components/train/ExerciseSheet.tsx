@@ -499,9 +499,6 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
                 <Text style={styles.timerValue}>
                   {formatElapsed(restElapsedMs(state.timer, state.restStartedAt, now))}
                 </Text>
-                <Button mode="contained" compact onPress={onStopRelax}>
-                  Stop
-                </Button>
               </View>
             ) : (
               <View style={styles.timerRow}>
@@ -518,15 +515,29 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
 
             <View style={styles.spacer} />
 
-            <Button
-              mode="contained"
-              disabled={!canLog || repsComplete || showSuccess}
-              onPress={onFinishRep}
-              style={styles.repButton}
-              contentStyle={styles.repButtonContent}
-            >
-              Finish rep
-            </Button>
+            {/* One primary action at a time. While resting the only honest
+                next moves are ending the rest or ending the set — a live
+                "Finish rep" would log a rep whose duration is really rest. */}
+            {resting ? (
+              <Button
+                mode="contained"
+                onPress={onStopRelax}
+                style={styles.repButton}
+                contentStyle={styles.repButtonContent}
+              >
+                Stop relax
+              </Button>
+            ) : (
+              <Button
+                mode="contained"
+                disabled={!canLog || repsComplete || showSuccess}
+                onPress={onFinishRep}
+                style={styles.repButton}
+                contentStyle={styles.repButtonContent}
+              >
+                Finish rep
+              </Button>
+            )}
             <Button
               mode="contained-tonal"
               disabled={!canLog || repsDone === 0 || showSuccess}
