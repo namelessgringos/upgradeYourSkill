@@ -211,6 +211,9 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
       onClose={handleSheetClose}
       backdropComponent={renderBackdrop}
       keyboardBehavior="interactive"
+      // Without this the sheet stays where the keyboard pushed it after the
+      // keyboard goes away, leaving the list stranded off-screen.
+      keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustResize"
       backgroundStyle={styles.sheetBackground}
     >

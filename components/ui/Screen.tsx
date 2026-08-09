@@ -1,4 +1,10 @@
-import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  type ViewStyle,
+} from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { notifyScroll } from '@/components/mascot/scrollSignal';
 import { JournalColors, Spacing } from '@/constants/theme';
@@ -26,13 +32,26 @@ export function Screen({
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, inner]}
           keyboardShouldPersistTaps="handled"
+          // The keyboard used to sit on top of whatever you were typing into.
+          // iOS insets the scroll content by the keyboard's height and scrolls
+          // the focused field into view; on Android the same job is done by
+          // the window's resize soft-input mode.
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          // A numeric pad has no return key, so dragging the keyboard away is
+          // the only dismissal that does not require hitting empty background.
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           scrollEventThrottle={16}
           onScroll={notifyScroll}
         >
           {children}
         </ScrollView>
       ) : (
-        <View style={[styles.flex, inner]}>{children}</View>
+        <KeyboardAvoidingView
+          style={[styles.flex, inner]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          {children}
+        </KeyboardAvoidingView>
       )}
     </SafeAreaView>
   );
