@@ -499,6 +499,16 @@ export function ExerciseSheet({ mode, onModeChange, onExerciseChosen, now }: Pro
                 <Text style={styles.timerValue}>
                   {formatElapsed(restElapsedMs(state.timer, state.restStartedAt, now))}
                 </Text>
+                <IconButton
+                  icon="stop"
+                  mode="contained"
+                  size={22}
+                  onPress={onStopRelax}
+                  containerColor={JournalColors.accent}
+                  iconColor={JournalColors.white}
+                  style={styles.stopCircle}
+                  accessibilityLabel="Stop relax"
+                />
               </View>
             ) : (
               <View style={styles.timerRow}>
@@ -726,7 +736,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: JournalColors.paperBg,
   },
-  relaxRow: { backgroundColor: JournalColors.selected },
+  relaxRow: { backgroundColor: JournalColors.selected, paddingVertical: Spacing.xs },
+  stopCircle: { margin: 0 },
   relaxLabel: { fontSize: 13, fontWeight: '800', letterSpacing: 1, color: JournalColors.accent },
   repTimerLabel: {
     fontSize: 13,
