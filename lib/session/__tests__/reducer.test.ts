@@ -141,11 +141,35 @@ describe('completeSet', () => {
     });
   });
 
-  it('records the rest that preceded the set and clears the rest clock', () => {
+  it('records the rest that preceded the set', () => {
     let state = sessionReducer(readyToLog(), { type: 'startRest', now: T0 + 10_000 });
     state = sessionReducer(state, { type: 'completeSet', now: T0 + 100_000 });
     expect(state.sets[0].restMs).toBe(90_000);
-    expect(state.restStartedAt).toBeNull();
+  });
+
+  it('starts the next rest at the moment the set ends', () => {
+    const state = sessionReducer(readyToLog(), { type: 'completeSet', now: T0 + 10_000 });
+    expect(state.restStartedAt).toBe(10_000);
+  });
+
+  it('restarts the rest clock rather than carrying the previous rest forward', () => {
+    // Rest ran for 90s before this set. The set's own restMs keeps that 90s,
+    // but the clock now counts the NEW rest from zero.
+    let state = sessionReducer(readyToLog(), { type: 'startRest', now: T0 + 10_000 });
+    state = sessionReducer(state, { type: 'completeSet', now: T0 + 100_000 });
+    expect(state.sets[0].restMs).toBe(90_000);
+    expect(state.restStartedAt).toBe(100_000);
+  });
+
+  it('gives the first set of a session no preceding rest', () => {
+    const state = sessionReducer(readyToLog(), { type: 'completeSet', now: T0 + 10_000 });
+    expect(state.sets[0].restMs).toBeNull();
+  });
+
+  it('measures the second set rest from the first set, with no manual start', () => {
+    let state = sessionReducer(readyToLog(), { type: 'completeSet', now: T0 + 10_000 });
+    state = sessionReducer(state, { type: 'completeSet', now: T0 + 70_000 });
+    expect(state.sets[1].restMs).toBe(60_000);
   });
 
   it('excludes a pause spanning the rest from the recorded duration', () => {
@@ -168,6 +192,40 @@ describe('completeSet', () => {
   it('is rejected with no exercise selected', () => {
     const state = started();
     expect(sessionReducer(state, { type: 'completeSet', now: T0 + 1000 })).toBe(state);
+  });
+});
+
+describe('stopRest', () => {
+  function resting(): SessionState {
+    const selected = sessionReducer(started(), {
+      type: 'selectExercise',
+      exerciseId: 'squat',
+      exerciseName: 'Back Squat',
+    });
+    return sessionReducer(selected, { type: 'startRest', now: T0 + 10_000 });
+  }
+
+  it('clears a running rest clock', () => {
+    const state = sessionReducer(resting(), { type: 'stopRest' });
+    expect(state.restStartedAt).toBeNull();
+  });
+
+  it('does nothing when no rest is running', () => {
+    const state = started();
+    expect(sessionReducer(state, { type: 'stopRest' })).toBe(state);
+  });
+
+  it('leaves already-logged sets and their recorded rest alone', () => {
+    let state = sessionReducer(resting(), { type: 'completeSet', now: T0 + 100_000 });
+    state = sessionReducer(state, { type: 'stopRest' });
+    expect(state.sets).toHaveLength(1);
+    expect(state.sets[0].restMs).toBe(90_000);
+  });
+
+  it('makes the next set record no rest, because none was running', () => {
+    let state = sessionReducer(resting(), { type: 'stopRest' });
+    state = sessionReducer(state, { type: 'completeSet', now: T0 + 100_000 });
+    expect(state.sets[0].restMs).toBeNull();
   });
 });
 

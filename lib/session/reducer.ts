@@ -16,6 +16,7 @@ export type SessionAction =
   | { type: 'setReps'; reps: number }
   | { type: 'setWeight'; weight: number }
   | { type: 'startRest'; now: number }
+  | { type: 'stopRest' }
   | { type: 'completeSet'; now: number }
   | { type: 'removeSet'; index: number }
   | { type: 'setClient'; clientId: string | null }
@@ -132,12 +133,21 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       // the `restStartedAt` doc comment in types.ts.
       return { ...state, restStartedAt: elapsedMs(state.timer, action.now) };
 
+    case 'stopRest':
+      // Idempotent on purpose: the button is reachable from a state where no
+      // rest is running, and a no-op reads better there than a guard.
+      if (state.restStartedAt === null) return state;
+      return { ...state, restStartedAt: null };
+
     case 'completeSet': {
       if (state.timer.status !== 'running') return state;
       if (state.currentExerciseId === null || state.currentExerciseName === null) return state;
       return {
         ...state,
-        restStartedAt: null,
+        // Rest begins the instant a set ends. Nobody reaches for a second
+        // button with a barbell still in their hands, and the rest that
+        // matters is the one *between* sets — which is exactly this one.
+        restStartedAt: elapsedMs(state.timer, action.now),
         sets: [
           ...state.sets,
           {

@@ -1,50 +1,73 @@
 import { StyleSheet, View } from 'react-native';
 import { Button, Surface, Text } from 'react-native-paper';
-import { Spacing } from '@/constants/theme';
+import { JournalColors, Spacing } from '@/constants/theme';
 import { useSession } from '@/lib/session/SessionProvider';
 import { formatElapsed, restElapsedMs } from '@/lib/session/timer';
 
 /**
- * Counts up from `state.restStartedAt` using the shared clock — never its
+ * Rest counts up from `state.restStartedAt` using the shared clock — never its
  * own interval. `restStartedAt` is a session-elapsed offset, not an epoch
- * timestamp, so `restElapsedMs` derives the displayed value the same way the
- * reducer derives the recorded one: a pause mid-rest is excluded from both.
- * It clears itself the moment `completeSet` fires, because the reducer resets
- * `restStartedAt` to null on that action.
+ * timestamp, so a pause mid-rest is excluded from what is shown and from what
+ * is recorded.
+ *
+ * Rest now starts on its own when a set is completed, so this component's job
+ * is to show it and to offer the way out. Before, the only exit from a running
+ * rest was completing another set — a dead end if you simply wanted to stop.
  */
 export function RestStopwatch({ now }: { now: number }) {
   const { state, dispatch } = useSession();
 
   const restStartedAt = state.restStartedAt;
-  const resting = restStartedAt !== null;
-  const canStart = state.timer.status === 'running' && !resting;
+  const running = state.timer.status === 'running';
+
+  if (restStartedAt === null) {
+    return (
+      <Surface style={styles.card} elevation={1}>
+        <View style={styles.row}>
+          <Text style={styles.idleLabel}>Rest</Text>
+          <Button
+            mode="outlined"
+            disabled={!running}
+            onPress={() => dispatch({ type: 'startRest', now: Date.now() })}
+          >
+            Start rest
+          </Button>
+        </View>
+      </Surface>
+    );
+  }
 
   return (
-    <Surface style={styles.card} elevation={1}>
-      <View style={styles.row}>
-        <Text variant="labelLarge" style={styles.label}>
-          Rest
-        </Text>
-        <Text variant="headlineSmall" style={styles.value}>
-          {restStartedAt === null
-            ? '—'
-            : formatElapsed(restElapsedMs(state.timer, restStartedAt, now))}
-        </Text>
-        <Button
-          mode={resting ? 'outlined' : 'contained'}
-          disabled={!canStart}
-          onPress={() => dispatch({ type: 'startRest', now: Date.now() })}
-        >
-          {resting ? 'Resting…' : 'Start rest'}
-        </Button>
-      </View>
+    <Surface style={[styles.card, styles.resting]} elevation={1}>
+      <Text style={styles.restingLabel}>RESTING</Text>
+      <Text style={styles.value}>
+        {formatElapsed(restElapsedMs(state.timer, restStartedAt, now))}
+      </Text>
+      <Button
+        mode="contained"
+        onPress={() => dispatch({ type: 'stopRest' })}
+        style={styles.stopButton}
+        contentStyle={styles.stopButtonContent}
+      >
+        Stop resting
+      </Button>
     </Surface>
   );
 }
 
 const styles = StyleSheet.create({
   card: { borderRadius: 12, padding: Spacing.lg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  label: { opacity: 0.7 },
-  value: { flex: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  idleLabel: { fontSize: 15, fontWeight: '600', color: JournalColors.inkFaint },
+  resting: { alignItems: 'center', gap: Spacing.sm },
+  restingLabel: { fontSize: 13, fontWeight: '800', letterSpacing: 1.5, color: JournalColors.accent },
+  value: {
+    fontSize: 44,
+    lineHeight: 50,
+    fontWeight: '800',
+    color: JournalColors.inkBlack,
+    fontVariant: ['tabular-nums'],
+  },
+  stopButton: { alignSelf: 'stretch' },
+  stopButtonContent: { paddingVertical: Spacing.md },
 });

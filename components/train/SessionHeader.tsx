@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { IconButton, Surface, Text } from 'react-native-paper';
-import { Spacing } from '@/constants/theme';
+import { JournalColors, Spacing } from '@/constants/theme';
 import { useSession } from '@/lib/session/SessionProvider';
 import { elapsedMs, formatElapsed } from '@/lib/session/timer';
 import type { TrainingStyle } from '@/lib/session/types';
@@ -52,20 +52,19 @@ export function SessionHeader({ now }: { now: number }) {
   return (
     <Surface style={styles.header} elevation={1}>
       <View style={styles.row}>
-        <View>
-          <Text variant="displaySmall" style={styles.elapsed}>
-            {formatElapsed(elapsedMs(state.timer, now))}
-          </Text>
-          <Text variant="bodyMedium" style={styles.meta}>
+        <View style={styles.titleBlock}>
+          <Text style={styles.elapsed}>{formatElapsed(elapsedMs(state.timer, now))}</Text>
+          <Text style={styles.meta}>
             {STYLE_LABELS[state.style]} · {clientName ?? 'No client'}
           </Text>
         </View>
         <IconButton
           icon={isPaused ? 'play' : 'pause'}
-          mode="contained"
-          size={28}
+          size={18}
+          iconColor={JournalColors.inkFaint}
           disabled={isFinished}
           onPress={onPauseResume}
+          style={styles.pauseButton}
         />
       </View>
     </Surface>
@@ -73,8 +72,19 @@ export function SessionHeader({ now }: { now: number }) {
 }
 
 const styles = StyleSheet.create({
-  header: { borderRadius: 12, padding: Spacing.lg },
+  header: { borderRadius: 12, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  elapsed: { fontWeight: '800' },
-  meta: { opacity: 0.7, marginTop: 2 },
+  titleBlock: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.md, flex: 1 },
+  // Deliberately quiet. The elapsed clock is reference, not the thing being
+  // read — a coach glances at it between sets and otherwise wants it gone.
+  // Tabular figures stop the row from jittering as the digits change.
+  elapsed: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '600',
+    color: JournalColors.inkFaint,
+    fontVariant: ['tabular-nums'],
+  },
+  meta: { fontSize: 13, color: JournalColors.inkFaint, opacity: 0.8 },
+  pauseButton: { margin: 0 },
 });
