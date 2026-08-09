@@ -5,6 +5,7 @@ import BottomSheet, {
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import Slider from '@react-native-community/slider';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { Button, IconButton, List, Text } from 'react-native-paper';
@@ -14,35 +15,36 @@ import { searchExercises } from '@/lib/session/store';
 import type { Exercise } from '@/lib/session/types';
 
 const WEIGHT_STEP = 2.5;
+/** Slider ceiling. Above this the ± buttons still work, so it is not a cap. */
+const WEIGHT_SLIDER_MAX = 200;
 const SECTION_LIMIT = 5;
-/** How long the tick stays up before the sheet closes itself. */
-const SUCCESS_MS = 700;
-/**
- * One height for both modes, defined once at module scope.
- *
- * Not derived from `mode`: changing snapPoints in the same render that opens
- * the sheet lets gorhom re-clamp the index back to closed, which fires
- * `onClose`, which resets the mode — and the sheet never appears.
- */
-const SNAP_POINTS = ['75%'];
+/** How long the tick stays up before the sheet zooms out. */
+const SUCCESS_MS = 600;
 
 /**
- * `null` is closed. `picker` opens on the exercise list; `config` opens
- * straight on the steppers for an exercise already chosen.
+ * Heights are fixed at module scope, not derived from the mode.
+ *
+ * Deriving them changes snapPoints in the same render that opens the sheet,
+ * which lets gorhom re-clamp the index back to closed, fire `onClose`, and
+ * reset the mode — the sheet closing itself as part of opening.
  */
-export type SheetMode = null | 'picker' | 'config';
+const SNAP_POINTS = ['92%'];
+
+/**
+ * `null` is closed. `picker` chooses what to do next; `active` is the working
+ * set, which deliberately takes almost the whole screen — it is the only thing
+ * being touched while a set is under way.
+ */
+export type SheetMode = null | 'picker' | 'active';
 
 interface Props {
   mode: SheetMode;
   onModeChange: (mode: SheetMode) => void;
+  /** Chosen an exercise from the picker — the parent ends any running rest. */
+  onExerciseChosen: () => void;
 }
 
-/**
- * The only place a set is logged. Everything that used to sit permanently on
- * the live screen — picker, reps, weight, Complete set — lives in here, so the
- * screen behind it stays the session record rather than a control panel.
- */
-export function ExerciseSheet({ mode, onModeChange }: Props) {
+export function ExerciseSheet({ mode, onModeChange, onExerciseChosen }: Props) {
   const { state, dispatch, store } = useSession();
   const sheetRef = useRef<BottomSheet>(null);
 
@@ -57,8 +59,6 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
   const successScale = useRef(new Animated.Value(0)).current;
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Drive the sheet from the mode prop so the parent stays the single source
-  // of truth — the sheet's own gestures report back through onClose.
   useEffect(() => {
     if (mode === null) sheetRef.current?.close();
     else sheetRef.current?.expand();
@@ -107,25 +107,25 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
     setQuery('');
     setCustomName('');
     selectedExerciseIdRef.current = exercise.id;
-    // Guarded against a slow store returning after a newer pick — without the
-    // ref check, picking A then B silently reverts to A when A resolves last.
+    onExerciseChosen();
+
+    const open = (last: { reps: number; weight: number } | null) => {
+      if (selectedExerciseIdRef.current !== exercise.id) return;
+      dispatch({
+        type: 'selectExercise',
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        ...(last === null ? {} : { lastReps: last.reps, lastWeight: last.weight }),
+      });
+      onModeChange('active');
+    };
+
+    // Guarded against a slow store: picking A then B would otherwise revert to
+    // A when A's lookup resolves last.
     store
       .lastPerformance(exercise.id)
-      .then((last) => {
-        if (selectedExerciseIdRef.current !== exercise.id) return;
-        dispatch({
-          type: 'selectExercise',
-          exerciseId: exercise.id,
-          exerciseName: exercise.name,
-          ...(last === null ? {} : { lastReps: last.reps, lastWeight: last.weight }),
-        });
-        onModeChange('config');
-      })
-      .catch(() => {
-        if (selectedExerciseIdRef.current !== exercise.id) return;
-        dispatch({ type: 'selectExercise', exerciseId: exercise.id, exerciseName: exercise.name });
-        onModeChange('config');
-      });
+      .then(open)
+      .catch(() => open(null));
   };
 
   const addCustom = () => {
@@ -142,16 +142,17 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
       });
   };
 
-  const onCompleteSet = () => {
+  const onFinishSet = () => {
     dispatch({ type: 'completeSet', now: Date.now() });
     setShowSuccess(true);
     successScale.setValue(0);
     Animated.timing(successScale, {
       toValue: 1,
-      duration: 220,
+      duration: 200,
       easing: Easing.out(Easing.back(2)),
       useNativeDriver: true,
     }).start();
+    // Zoom out to the session behind, where rest is now running.
     closeTimer.current = setTimeout(() => {
       setShowSuccess(false);
       onModeChange(null);
@@ -166,8 +167,7 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
   );
 
   // gorhom fires onClose for its own dismissals AND for our programmatic
-  // close(). Reporting a close we already know about would set the mode to a
-  // value it already holds; worse, a late-arriving one could cancel an open
+  // close(). Reporting a close we already know about could cancel an open
   // that has just begun.
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -175,10 +175,10 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
     if (modeRef.current !== null) onModeChange(null);
   }, [onModeChange]);
 
-  const completedForExercise =
+  const setsForExercise =
     state.currentExerciseId === null
-      ? 0
-      : state.sets.filter((set) => set.exerciseId === state.currentExerciseId).length;
+      ? []
+      : state.sets.filter((set) => set.exerciseId === state.currentExerciseId);
 
   const canLogSet = state.currentExerciseId !== null && state.timer.status === 'running';
 
@@ -202,24 +202,22 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
       ref={sheetRef}
       index={-1}
       snapPoints={SNAP_POINTS}
-      // v5 defaults this to true, which makes the sheet size to its content
-      // and quietly ignore snapPoints. A non-measuring child then yields a
-      // zero-height sheet: it opens, and nothing is visible.
+      // v5 defaults this to true, which sizes the sheet to its content and
+      // ignores snapPoints. A non-measuring child then yields a zero-height
+      // sheet: it opens, and nothing is visible.
       enableDynamicSizing={false}
       animateOnMount={false}
       enablePanDownToClose
       onClose={handleSheetClose}
       backdropComponent={renderBackdrop}
       keyboardBehavior="interactive"
-      // Without this the sheet stays where the keyboard pushed it after the
-      // keyboard goes away, leaving the list stranded off-screen.
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustResize"
       backgroundStyle={styles.sheetBackground}
     >
       {mode === 'picker' ? (
         <BottomSheetScrollView contentContainerStyle={styles.body}>
-          <Text style={styles.title}>Choose an exercise</Text>
+          <Text style={styles.title}>Next exercise</Text>
           <BottomSheetTextInput
             placeholder="Search"
             placeholderTextColor={JournalColors.inkFaint}
@@ -245,37 +243,96 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
         </BottomSheetScrollView>
       ) : (
         <BottomSheetView style={styles.body}>
-          <View style={styles.configHeader}>
-            <View style={styles.configTitleBlock}>
+          <View style={styles.activeHeader}>
+            <View style={styles.activeTitleBlock}>
               <Text style={styles.title}>{state.currentExerciseName ?? 'No exercise'}</Text>
-              <Text style={styles.subtitle}>Set {completedForExercise + 1}</Text>
+              <Text style={styles.subtitle}>Set {setsForExercise.length + 1}</Text>
             </View>
             <Button mode="text" onPress={() => onModeChange('picker')}>
               Change
             </Button>
           </View>
 
-          <Stepper
-            label="Reps"
-            value={state.reps}
-            onDecrement={() => dispatch({ type: 'setReps', reps: state.reps - 1 })}
-            onIncrement={() => dispatch({ type: 'setReps', reps: state.reps + 1 })}
-          />
-          <Stepper
-            label="Weight (kg)"
-            value={state.weight}
-            onDecrement={() => dispatch({ type: 'setWeight', weight: state.weight - WEIGHT_STEP })}
-            onIncrement={() => dispatch({ type: 'setWeight', weight: state.weight + WEIGHT_STEP })}
-          />
+          {setsForExercise.length > 0 && (
+            <View style={styles.doneRow}>
+              {setsForExercise.map((set, index) => (
+                <View key={`${set.completedAt}-${index}`} style={styles.doneChip}>
+                  <Text style={styles.doneChipText}>
+                    {set.reps} × {set.weight}kg
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Reps</Text>
+            <View style={styles.stepperRow}>
+              <IconButton
+                icon="minus"
+                mode="outlined"
+                size={26}
+                onPress={() => dispatch({ type: 'setReps', reps: state.reps - 1 })}
+              />
+              <Text style={styles.bigValue}>{state.reps}</Text>
+              <IconButton
+                icon="plus"
+                mode="outlined"
+                size={26}
+                onPress={() => dispatch({ type: 'setReps', reps: state.reps + 1 })}
+              />
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Weight</Text>
+            <View style={styles.stepperRow}>
+              <IconButton
+                icon="minus"
+                mode="outlined"
+                size={22}
+                onPress={() =>
+                  dispatch({ type: 'setWeight', weight: state.weight - WEIGHT_STEP })
+                }
+              />
+              <Text style={styles.bigValue}>{state.weight}</Text>
+              <Text style={styles.unit}>kg</Text>
+              <IconButton
+                icon="plus"
+                mode="outlined"
+                size={22}
+                onPress={() =>
+                  dispatch({ type: 'setWeight', weight: state.weight + WEIGHT_STEP })
+                }
+              />
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={WEIGHT_SLIDER_MAX}
+              step={WEIGHT_STEP}
+              value={Math.min(state.weight, WEIGHT_SLIDER_MAX)}
+              // Android's slider drifts off the step by a float epsilon, which
+              // shows up as 12.500000000000002 in a 46px number.
+              onValueChange={(weight) =>
+                dispatch({ type: 'setWeight', weight: Math.round(weight / WEIGHT_STEP) * WEIGHT_STEP })
+              }
+              minimumTrackTintColor={JournalColors.accent}
+              maximumTrackTintColor={JournalColors.gridLine}
+              thumbTintColor={JournalColors.accent}
+            />
+          </View>
+
+          <View style={styles.spacer} />
 
           <Button
             mode="contained"
             disabled={!canLogSet || showSuccess}
-            onPress={onCompleteSet}
-            style={styles.completeButton}
-            contentStyle={styles.completeButtonContent}
+            onPress={onFinishSet}
+            style={styles.finishButton}
+            contentStyle={styles.finishButtonContent}
           >
-            Complete set
+            Finish set
           </Button>
 
           {showSuccess && (
@@ -294,34 +351,38 @@ export function ExerciseSheet({ mode, onModeChange }: Props) {
   );
 }
 
-function Stepper({
-  label,
-  value,
-  onDecrement,
-  onIncrement,
-}: {
-  label: string;
-  value: number;
-  onDecrement: () => void;
-  onIncrement: () => void;
-}) {
-  return (
-    <View style={styles.stepperRow}>
-      <Text style={styles.stepperLabel}>{label}</Text>
-      <IconButton icon="minus" mode="outlined" size={22} onPress={onDecrement} />
-      <Text style={styles.stepperValue}>{value}</Text>
-      <IconButton icon="plus" mode="outlined" size={22} onPress={onIncrement} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   sheetBackground: { backgroundColor: JournalColors.white },
-  body: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: Spacing.md },
-  title: { fontSize: 19, fontWeight: '800', color: JournalColors.inkBlack },
-  subtitle: { fontSize: 13, color: JournalColors.inkFaint, marginTop: 2 },
-  configHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  configTitleBlock: { flex: 1 },
+  body: { flex: 1, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: Spacing.md },
+  title: { fontSize: 22, fontWeight: '800', color: JournalColors.inkBlack },
+  subtitle: { fontSize: 14, color: JournalColors.inkFaint, marginTop: 2 },
+  activeHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  activeTitleBlock: { flex: 1 },
+  doneRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  doneChip: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: JournalColors.paperBg,
+    borderWidth: 1,
+    borderColor: JournalColors.gridLine,
+  },
+  doneChipText: { fontSize: 14, fontWeight: '700', color: JournalColors.inkBrown },
+  field: { gap: Spacing.xs },
+  fieldLabel: { fontSize: 14, fontWeight: '700', color: JournalColors.inkFaint },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
+  bigValue: {
+    minWidth: 90,
+    textAlign: 'center',
+    fontSize: 46,
+    lineHeight: 54,
+    fontWeight: '800',
+    color: JournalColors.inkBlack,
+    fontVariant: ['tabular-nums'],
+  },
+  unit: { fontSize: 18, fontWeight: '700', color: JournalColors.inkFaint, marginLeft: -Spacing.sm },
+  slider: { width: '100%', height: 40 },
+  spacer: { flex: 1 },
   input: {
     borderWidth: 1,
     borderColor: JournalColors.gridLine,
@@ -334,18 +395,8 @@ const styles = StyleSheet.create({
   },
   addRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', marginTop: Spacing.sm },
   addInput: { flex: 1 },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  stepperLabel: { flex: 1, fontSize: 15, color: JournalColors.inkFaint, fontWeight: '600' },
-  stepperValue: {
-    minWidth: 64,
-    textAlign: 'center',
-    fontSize: 26,
-    fontWeight: '800',
-    color: JournalColors.inkBlack,
-    fontVariant: ['tabular-nums'],
-  },
-  completeButton: { marginTop: Spacing.sm },
-  completeButtonContent: { paddingVertical: Spacing.md },
+  finishButton: { marginTop: Spacing.sm },
+  finishButtonContent: { paddingVertical: Spacing.lg },
   successOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',

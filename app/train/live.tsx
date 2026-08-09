@@ -1,6 +1,6 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button } from 'react-native-paper';
 import { Screen } from '@/components/ui/Screen';
@@ -21,9 +21,44 @@ export default function TrainLive() {
   const now = useSessionClock(state.timer.status === 'running');
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
 
+  /**
+   * "Stop resting" offers the next exercise. Dismissing that offer means the
+   * rest was not actually over, so it keeps running — but the offer is not
+   * made again for THIS rest. Nagging someone who already said no is worse
+   * than making them tap twice.
+   *
+   * Scoped to the current rest, not the session: a permanent opt-out would
+   * silently remove the feature for the rest of the workout.
+   */
+  const [offerDeclined, setOfferDeclined] = useState(false);
+  const previousRestRef = useRef(state.restStartedAt);
+  useEffect(() => {
+    if (state.restStartedAt !== previousRestRef.current) {
+      previousRestRef.current = state.restStartedAt;
+      if (state.restStartedAt !== null) setOfferDeclined(false);
+    }
+  }, [state.restStartedAt]);
+
   const onFinish = () => {
     dispatch({ type: 'finish', now: Date.now() });
     router.replace('/train/summary');
+  };
+
+  const onStopRest = () => {
+    if (offerDeclined) {
+      dispatch({ type: 'stopRest' });
+      return;
+    }
+    // Rest deliberately keeps running until an exercise is actually chosen.
+    setSheetMode('picker');
+  };
+
+  const onSheetModeChange = (next: SheetMode) => {
+    // Closing the picker while a rest is still running is the decline.
+    if (next === null && sheetMode === 'picker' && state.restStartedAt !== null) {
+      setOfferDeclined(true);
+    }
+    setSheetMode(next);
   };
 
   /**
@@ -33,6 +68,7 @@ export default function TrainLive() {
    */
   const onOpenExercise = (exerciseId: string, exerciseName: string) => {
     const previous = [...state.sets].reverse().find((set) => set.exerciseId === exerciseId);
+    dispatch({ type: 'stopRest' });
     dispatch({
       type: 'selectExercise',
       exerciseId,
@@ -41,7 +77,7 @@ export default function TrainLive() {
         ? {}
         : { lastReps: previous.reps, lastWeight: previous.weight }),
     });
-    setSheetMode('config');
+    setSheetMode('active');
   };
 
   return (
@@ -55,7 +91,7 @@ export default function TrainLive() {
               onOpenExercise={onOpenExercise}
               onAddExercise={() => setSheetMode('picker')}
             />
-            <RestStopwatch now={now} />
+            <RestStopwatch now={now} onStopRest={onStopRest} />
           </>
         ) : (
           <IntervalClock now={now} />
@@ -66,7 +102,13 @@ export default function TrainLive() {
         </Button>
       </Screen>
 
-      {state.style === 'gym' && <ExerciseSheet mode={sheetMode} onModeChange={setSheetMode} />}
+      {state.style === 'gym' && (
+        <ExerciseSheet
+          mode={sheetMode}
+          onModeChange={onSheetModeChange}
+          onExerciseChosen={() => dispatch({ type: 'stopRest' })}
+        />
+      )}
     </View>
   );
 }

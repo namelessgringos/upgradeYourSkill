@@ -10,11 +10,15 @@ import { formatElapsed, restElapsedMs } from '@/lib/session/timer';
  * timestamp, so a pause mid-rest is excluded from what is shown and from what
  * is recorded.
  *
- * Rest now starts on its own when a set is completed, so this component's job
- * is to show it and to offer the way out. Before, the only exit from a running
- * rest was completing another set — a dead end if you simply wanted to stop.
+ * Rest starts on its own when a set is completed, so this component's job is to
+ * show it and to offer the way out. Before, the only exit from a running rest
+ * was completing another set — a dead end if you simply wanted to stop.
+ *
+ * "Stop resting" does not stop anything here. It reports the intent upwards,
+ * because ending a rest and choosing what to do next are the same moment for
+ * the person holding the phone — see `onStopRest` in `live.tsx`.
  */
-export function RestStopwatch({ now }: { now: number }) {
+export function RestStopwatch({ now, onStopRest }: { now: number; onStopRest: () => void }) {
   const { state, dispatch } = useSession();
 
   const restStartedAt = state.restStartedAt;
@@ -45,7 +49,7 @@ export function RestStopwatch({ now }: { now: number }) {
       </Text>
       <Button
         mode="contained"
-        onPress={() => dispatch({ type: 'stopRest' })}
+        onPress={onStopRest}
         style={styles.stopButton}
         contentStyle={styles.stopButtonContent}
       >
